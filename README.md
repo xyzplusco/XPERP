@@ -499,7 +499,7 @@ The next agent should not build from the old phase plan. Use this revised plan.
 | 2 | Database Schema & Import Contracts | Pending |
 | 3 | Seed Extraction & Reconciliation Reports | Pending |
 | 4 | App Scaffold & Design System | Pending |
-| 5 | Auth, Permissions, Document Storage | Pending |
+| 5 | Auth, Permissions, Document Storage | In progress |
 | 6 | Network Module | Pending |
 | 7 | Project Module | Pending |
 | 8 | Event Module | Pending |
@@ -545,4 +545,3 @@ Do not postpone these tables.
 2. Document sensitivity levels: simple internal/confidential/restricted is recommended for v1.
 3. Whether Google Drive links should be stored beside uploaded files in v1.
 4. Whether To Go List extraction should remain semi-manual with review queue or attempt aggressive automatic parsing.
-

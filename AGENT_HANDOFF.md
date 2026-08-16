@@ -7,7 +7,7 @@
 | Item | Current State |
 |---|---|
 | Product | XP internal ERP for network, projects, events, documents, tasks, and search |
-| Current phase | Phase 5 — Supabase Connection |
+| Current phase | Phase 5 — Auth, Permissions, Document Storage |
 | Previous issue | Old plan treated Documents & Tasks as Phase 10 / optional. That is wrong. |
 | UI direction | Dense B2C SaaS/ERP, one primary green, restrained accent, no traffic-light AI badge styling |
 | Primary color | `#1a3c2c` |
@@ -152,9 +152,29 @@ Use a hard, consistent ERP interface:
 
 ## 9. Handoff Log
 
+### [2026-08-17] Phase 5 — Supabase Auth Gate Added
+
+**Status**: Supabase DB is connected and seeded; app-level login gate is now added.
+
+**Completed**
+- XP logo and `XP Dashboard` brand area link back to `/`.
+- Added `/login` with Supabase email/password sign-in.
+- Added `proxy.ts` session guard. All ERP routes redirect to `/login` unless a Supabase Auth session exists.
+- Added topbar login/logout control.
+- Added `@supabase/ssr` for browser and server session cookie handling.
+
+**Validation to run after edits**
+- `npm run build`.
+
+**Next**
+1. Create at least one Supabase Auth user in the Supabase dashboard.
+2. Add role/permission model in DB and UI: admin, manager, member, viewer.
+3. Add Supabase Storage buckets for partner profiles, NDA, contracts, event materials.
+4. Add row-level security after server-side data reads use the authenticated session.
+
 ### [2026-08-17] Phase 5 — Supabase Wiring Started
 
-**Status**: Supabase code wiring complete; remote DB apply blocked on missing credentials.
+**Status**: Supabase code wiring complete; remote DB migration and seed later completed with user-provided credentials.
 
 **Completed**
 - Replaced the dark-looking transparent logo with the provided white-background logo.

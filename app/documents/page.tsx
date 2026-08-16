@@ -2,6 +2,8 @@ import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getDocumentRequirementRows } from "@/lib/operational-data";
 
+export const dynamic = "force-dynamic";
+
 export default async function DocumentsPage() {
   const documentGaps = await getDocumentRequirementRows(24);
 

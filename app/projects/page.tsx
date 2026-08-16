@@ -2,6 +2,8 @@ import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getProjectRows, getProjectTypeSummary } from "@/lib/operational-data";
 
+export const dynamic = "force-dynamic";
+
 export default async function ProjectsPage() {
   const [activeProjects, projectTypeSummary] = await Promise.all([
     getProjectRows(18),

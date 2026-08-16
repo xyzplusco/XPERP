@@ -2,6 +2,8 @@ import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getEventRows } from "@/lib/operational-data";
 
+export const dynamic = "force-dynamic";
+
 export default async function EventsPage() {
   const eventRows = await getEventRows(14);
 

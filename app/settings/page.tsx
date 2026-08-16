@@ -7,6 +7,8 @@ const settingsRows = [
   { key: "가져오기 방식", value: "검토 큐를 포함한 재실행 가능 import" },
 ];
 
+export const dynamic = "force-dynamic";
+
 export default function SettingsPage() {
   return (
     <>

@@ -6,6 +6,8 @@ import {
   getTaskRows,
 } from "@/lib/operational-data";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const [sourceStats, activeProjects, documentGaps, taskRows] = await Promise.all([
     getSourceStats(),

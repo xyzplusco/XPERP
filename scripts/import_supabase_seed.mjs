@@ -1,10 +1,17 @@
 import fs from "node:fs/promises";
 import postgres from "postgres";
+import { loadLocalEnv } from "./load_env.mjs";
 
+loadLocalEnv();
 const databaseUrl = process.env.SUPABASE_DB_URL;
 
 if (!databaseUrl) {
   console.error("SUPABASE_DB_URL is required to import seed data.");
+  process.exit(1);
+}
+
+if (databaseUrl.includes("[YOUR-PASSWORD]")) {
+  console.error("SUPABASE_DB_URL still contains [YOUR-PASSWORD]. Replace it with the real Supabase database password.");
   process.exit(1);
 }
 

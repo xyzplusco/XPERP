@@ -2,6 +2,8 @@ import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getNetworkRows, getSegmentSummary } from "@/lib/operational-data";
 
+export const dynamic = "force-dynamic";
+
 export default async function NetworkPage() {
   const [networkRows, segmentSummary] = await Promise.all([
     getNetworkRows(18),

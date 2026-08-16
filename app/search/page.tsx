@@ -2,6 +2,8 @@ import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getSearchRows } from "@/lib/operational-data";
 
+export const dynamic = "force-dynamic";
+
 export default async function SearchPage() {
   const taskRows = await getSearchRows(16);
 

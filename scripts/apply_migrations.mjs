@@ -21,6 +21,7 @@ const migrationDir = path.join(root, "supabase", "migrations");
 const sql = postgres(databaseUrl, {
   max: 1,
   ssl: "require",
+  prepare: false,
 });
 
 try {

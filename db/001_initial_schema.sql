@@ -286,6 +286,7 @@ create table document_requirements (
   id uuid primary key default gen_random_uuid(),
   requirement_type text not null,
   title text not null,
+  subject_text text,
   status text not null default 'needed'
     check (status in ('not_required', 'needed', 'requested', 'received', 'signed', 'expired', 'waived')),
   person_id uuid references people(id) on delete cascade,
@@ -310,6 +311,7 @@ create table document_requirements (
     or project_id is not null
     or event_id is not null
     or task_id is not null
+    or subject_text is not null
   )
 );
 
@@ -523,7 +525,7 @@ order by e.created_at asc;
 create or replace view erp_document_requirement_rows as
 select
   dr.id,
-  coalesce(p.name_ko, c.name_ko, pr.name, e.name, dr.title) as subject,
+  coalesce(p.name_ko, c.name_ko, pr.name, e.name, dr.subject_text, dr.title) as subject,
   dr.requirement_type as type,
   coalesce(u.email, '') as owner,
   dr.status,

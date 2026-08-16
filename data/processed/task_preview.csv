@@ -1,0 +1,158 @@
+﻿source,source_sheet,source_row,title_guess,body,owner_hint,classification
+to_go,Sheet2,3,최 우선 과제,최 우선 과제,,heading
+to_go,Sheet2,4,9월 유럽 출장 일정 확정 필요,"9월 유럽 출장 일정 확정 필요 | 출장 참석자 - 정보 여권, | 윤권상",윤권상,likely_task
+to_go,Sheet2,5,"일정 - 입국, 출국","일정 - 입국, 출국 | 2026-07-31T00:00:00",2026-07-31T00:00:00,likely_task
+to_go,Sheet2,6,증자,증자 | 공유 | 1차,1차,likely_task
+to_go,Sheet2,7,엔젤투자조합,"엔젤투자조합 | 투자 관련 주간 | 직간접 투자, IR 검토/연결, M&A, 펀드 결성 | 윤권상 | 김수민 | 2026-08-02T00:00:00 | 2026-08-03T00:00:00 | 2026-08-05T00:00:00 | 최성찬, 조용구, 조폴린대표","최성찬, 조용구, 조폴린대표",likely_task
+to_go,Sheet2,9,메타프롭,메타프롭 | 블리츠스케일링 | 오수혁 | 최철만 | 김수민,김수민,needs_review
+to_go,Sheet2,10,IR 데이,IR 데이 | David Moon | 플링캐스트 | 닥터프레소 | 우동코 | 윤권상 | 11일 or 12일,11일 or 12일,likely_task
+to_go,Sheet2,12,내부 관리 방안 제도화 - 승인,내부 관리 방안 제도화 - 승인 | 윤권상,윤권상,needs_review
+to_go,Sheet2,13,프로젝트 운영,프로젝트 운영,,needs_review
+to_go,Sheet2,14,캐치웰,캐치웰 | 매출 정체 | 사무실,사무실,needs_review
+to_go,Sheet2,15,3단계 제안 - 전략,3단계 제안 - 전략,,needs_review
+to_go,Sheet2,16,"사무실 - 성수동 사무실 이전 / 간호섭교 가로수길 4-5층 / => 20명 그로빗 , 캐치웰 5-6인 , XP 4인석","사무실 - 성수동 사무실 이전 / 간호섭교 가로수길 4-5층 / => 20명 그로빗 , 캐치웰 5-6인 , XP 4인석",,needs_review
+to_go,Sheet2,17,오콘,오콘 | 우지희 대표님 별도 미팅 | IR - 사업 전략 | 이후 일정,이후 일정,likely_task
+to_go,Sheet2,18,대명건설,"대명건설 | 계약 | 패널 미팅 제안??   규찬, 재우, 승순??? 황룡 | 김수민",김수민,likely_task
+to_go,Sheet2,19,유엔어스,유엔어스 | 제안서 | 유영아 | 이보령,이보령,likely_task
+to_go,Sheet2,20,퍼니랜드,"퍼니랜드 | 입금 책임 완수 - 의사 소통. | 단기, 중기적으로 실적 전망 - 투자자에게 유의 사항과 전망 설명.   우리의 역할 | 윤권상 | 인수인계",인수인계,likely_task
+to_go,Sheet2,21,센트온,센트온 | 제안서 - 한재연 | 한재연 | 배서윤,배서윤,likely_task
+to_go,Sheet2,22,서울언니들,서울언니들 | 소싱- 태국 | 0.01 | 김수민 | F&B사업개발,F&B사업개발,needs_review
+to_go,Sheet2,23,울타리몰,울타리몰 | 미국 | 0.01 | 이정택,이정택,needs_review
+to_go,Sheet2,24,이동은,이동은 | 유럽 | (30억/ 매각 3%),(30억/ 매각 3%),needs_review
+to_go,Sheet2,25,권혜진,권혜진 | 이연정 | 8/8오픈,8/8오픈,needs_review
+to_go,Sheet2,26,황주환,황주환 | 이봉진,이봉진,needs_review
+to_go,Sheet2,27,MBK,MBK | 윤권상,윤권상,needs_review
+to_go,Sheet2,28,터미날즈,터미날즈 | 김수민 | 목민경 | 0.6,0.6,needs_review
+to_go,Sheet2,29,레이커스,레이커스 | 김수민 | 김태정 | 9%의 90% | 홀세일,홀세일,needs_review
+to_go,Sheet2,31,정원재,정원재 | AI 앱 - 약국을 위한?,AI 앱 - 약국을 위한?,needs_review
+to_go,Sheet2,34,윤세진,윤세진 | 수민님 - 세진 대표와 미팅하여 일정 잡아 보세요 | 김수민,김수민,likely_task
+to_go,Sheet2,35,마크비전 협력,마크비전 협력 | 윤권상,윤권상,needs_review
+to_go,Sheet2,37,우리동네 코치,우리동네 코치,,needs_review
+to_go,Sheet2,39,"새로운 파트너님들과 김수민 대표님 및 핵심 파트너들과 면담과, 일정 잡고 참관 시작 하기 - 프로파일 확보, NDA등 확보","새로운 파트너님들과 김수민 대표님 및 핵심 파트너들과 면담과, 일정 잡고 참관 시작 하기 - 프로파일 확보, NDA등 확보",,likely_task
+to_go,Sheet2,40,이종규,이종규 | 김수민,김수민,needs_review
+to_go,Sheet2,41,장용혁,장용혁 | NDA -프로필접수,NDA -프로필접수,likely_task
+to_go,Sheet2,42,서기석,서기석 | NDA,NDA,likely_task
+to_go,Sheet2,43,김낙균,김낙균,,needs_review
+to_go,Sheet2,44,김윤경,김윤경 | Z 벤처스 - 장동헌 대표 소개 | 일정 잡기 | 윤권상,윤권상,likely_task
+to_go,Sheet2,45,조훈희,조훈희 | NDA | 윤권상 | 투에이치 - 소개자료 1페이지,투에이치 - 소개자료 1페이지,likely_task
+to_go,Sheet2,47,기존 파트너님들과 간담회 - 활성화,기존 파트너님들과 간담회 - 활성화,,needs_review
+to_go,Sheet2,48,강승순,강승순 | 일정잡기 | 윤권상,윤권상,likely_task
+to_go,Sheet2,49,박선영,박선영,,needs_review
+to_go,Sheet2,50,이연정,이연정 | 김수민,김수민,needs_review
+to_go,Sheet2,51,이미영,이미영 | 김수민,김수민,needs_review
+to_go,Sheet2,52,김태정,김태정 | 김수민,김수민,needs_review
+to_go,Sheet2,54,휴면 상태 전환 여부 판단 필요,휴면 상태 전환 여부 판단 필요,,needs_review
+to_go,Sheet2,55,플립션,플립션 | 김수민,김수민,needs_review
+to_go,Sheet2,56,플링캐스트,플링캐스트 | 김수민,김수민,needs_review
+to_go,Sheet2,57,임팩트 AI,임팩트 AI | 윤권상,윤권상,needs_review
+to_go,Sheet2,58,레어01,레어01 | 김수민,김수민,needs_review
+to_go,Sheet2,59,오호스,오호스 | 김수민,김수민,needs_review
+to_go,Sheet2,60,김형철,김형철 | 김수민,김수민,needs_review
+to_go,Sheet2,62,미팅 잡기,미팅 잡기,,likely_task
+to_go,Sheet2,63,영업 전략 - 일정,영업 전략 - 일정 | 신규 거래선 확보를 위한 미팅 - 누구를 언제 어떻게 | 리스트 작성 | 백찬 | 황성필 | 황윤민,황윤민,likely_task
+to_go,Sheet2,64,윤권상,윤권상 | 정홍재,정홍재,needs_review
+to_go,Sheet2,66,상하농원,상하농원,,needs_review
+to_go,Sheet2,67,7월 29일 미팅 방문 자료 - 캠텍 양식에 넣어서 작성 하여 주기 - 초안을 정홍재님이 우선 작성 요망,7월 29일 미팅 방문 자료 - 캠텍 양식에 넣어서 작성 하여 주기 - 초안을 정홍재님이 우선 작성 요망 | 정홍재,정홍재,likely_task
+to_go,Sheet2,68,"8, 9월 현장 방문 일정 잡기","8, 9월 현장 방문 일정 잡기",,likely_task
+to_go,Sheet2,69,자료 접수 하기,자료 접수 하기,,needs_review
+to_go,Sheet2,70,우리 내부 간담회 언제로?,우리 내부 간담회 언제로?,,needs_review
+to_go,Sheet2,72,이승민,이승민,,needs_review
+to_go,Sheet2,73,윤수용님과 다음 미팅 일정 잡기  -  우선 날을 잡아 주세요  / 28일 미팅 내용 요약- 후속 미팅 과제 정리,윤수용님과 다음 미팅 일정 잡기  -  우선 날을 잡아 주세요  / 28일 미팅 내용 요약- 후속 미팅 과제 정리 | 윤권상 | 지희님 가능일정,지희님 가능일정,likely_task
+to_go,Sheet2,77,우동코,우동코 | 금주 진행사항,금주 진행사항,needs_review
+to_go,Sheet2,79,이번 주는 유럽 출장 관련 준비를 진행하고 있습니다.,이번 주는 유럽 출장 관련 준비를 진행하고 있습니다.,,likely_task
+to_go,Sheet2,81,코치분들의 유럽 출장 일정이 서로 달라 이번 주까지 일정을 취합한 후 전달드리겠습니다.,코치분들의 유럽 출장 일정이 서로 달라 이번 주까지 일정을 취합한 후 전달드리겠습니다.,,likely_task
+to_go,Sheet2,83,우리동네코치 코치분들의 여권은 전달받아 권상님께 전달드리겠습니다.,우리동네코치 코치분들의 여권은 전달받아 권상님께 전달드리겠습니다.,,needs_review
+to_go,Sheet2,85,박수진 대표님께서 IR 자료와 보험사·병원 등에 전달할 제안서를 보완하여 정리하고 계십니다.,박수진 대표님께서 IR 자료와 보험사·병원 등에 전달할 제안서를 보완하여 정리하고 계십니다.,,likely_task
+to_go,Sheet2,88,차주 일정,차주 일정,,likely_task
+to_go,Sheet2,90,장동헌 대표님 소개로 강남구청역 인근 병원과 미팅을 진행할 예정입니다.,장동헌 대표님 소개로 강남구청역 인근 병원과 미팅을 진행할 예정입니다.,,likely_task
+to_go,Sheet2,92,메디컬 스파 공간 내 운동치료 콘셉트 도입 및 협력 방안을 논의할 예정입니다.,메디컬 스파 공간 내 운동치료 콘셉트 도입 및 협력 방안을 논의할 예정입니다.,,needs_review
+to_go,Sheet2,127,1,1 | 매출 -  수익 관리,매출 -  수익 관리,needs_review
+to_go,Sheet2,128,1,"1 | 3개월 6개월 9개월 매출 - 수익 관리/  양식, 매달 업데이트 일정,","3개월 6개월 9개월 매출 - 수익 관리/  양식, 매달 업데이트 일정,",likely_task
+to_go,Sheet2,129,2,2 | 현재 고객 | 계약 관리 | 연장 | 확장 | 리스크 | 성과*단기*궁극적,성과*단기*궁극적,likely_task
+to_go,Sheet2,130,3,"3 | 신규 고객 | 계약 초기 고객에 대한 집중 관리 필요 - 초기 Communication, 초기 성과 - BJ 집중 마크 필요","계약 초기 고객에 대한 집중 관리 필요 - 초기 Communication, 초기 성과 - BJ 집중 마크 필요",likely_task
+to_go,Sheet2,131,4,4 | 시도 - 임박 고객 | 일정 관리 | 장애 요소 해소 | 촉진 요소 실행,촉진 요소 실행,likely_task
+to_go,Sheet2,132,5,5 | 지분 파트너쉽 고객,지분 파트너쉽 고객,needs_review
+to_go,Sheet2,133,6,6 | 기타 개발 대기,기타 개발 대기,needs_review
+to_go,Sheet2,134,7,7 | 신규 고객 개발,신규 고객 개발,needs_review
+to_go,Sheet2,136,1 - 1.,"1 - 1. | 관리 | 매월 몇일, 누가, 정리 정돈 확인, 내부 공유 - 누구까지 자료를 공유할지.   의사 결정 요소나 필요 조치 준비","매월 몇일, 누가, 정리 정돈 확인, 내부 공유 - 누구까지 자료를 공유할지.   의사 결정 요소나 필요 조치 준비",likely_task
+to_go,Sheet2,137,현금 흐름,현금 흐름 | 정리 정돈 정산,정리 정돈 정산,needs_review
+to_go,Sheet2,139,1 - 2.,"1 - 2. | 현재 | 각 업체별, 현재 상황, 계약 상황, 고객과 우리의 목표와 기대 성과 차이 여부 확인.  향후 평가, 필요 조치 파악,  필요시 지원 협력 - 실적 결과","각 업체별, 현재 상황, 계약 상황, 고객과 우리의 목표와 기대 성과 차이 여부 확인.  향후 평가, 필요 조치 파악,  필요시 지원 협력 - 실적 결과",likely_task
+to_go,Sheet2,140,계약 연장  -  재계약 -  서비스 확대 계약 -  시장 환경 재평가  -  궁극적 목표 재확인 //  현재 계약 단기 목표 달성 재확인 필요,계약 연장  -  재계약 -  서비스 확대 계약 -  시장 환경 재평가  -  궁극적 목표 재확인 //  현재 계약 단기 목표 달성 재확인 필요,,likely_task
+to_go,Sheet2,141,캐치웰,캐치웰,,needs_review
+to_go,Sheet2,142,오콘,오콘,,needs_review
+to_go,Sheet2,143,앵글,앵글,,needs_review
+to_go,Sheet2,145,별빛과 선인장,별빛과 선인장,,needs_review
+to_go,Sheet2,149,1 - 3.,1 - 3. | 신규,신규,needs_review
+to_go,Sheet2,150,레이커,레이커,,needs_review
+to_go,Sheet2,151,터미날즈,터미날즈,,needs_review
+to_go,Sheet2,153,상하목장,상하목장,,needs_review
+to_go,Sheet2,157,1 - 4.,1 - 4. | 시도 - 임박 - 재시도,시도 - 임박 - 재시도,needs_review
+to_go,Sheet2,158,대명건설?,대명건설?,,needs_review
+to_go,Sheet2,159,밀리옹?,밀리옹?,,needs_review
+to_go,Sheet2,160,센트온?,센트온?,,needs_review
+to_go,Sheet2,161,광고 에이전트,광고 에이전트,,needs_review
+to_go,Sheet2,163,퍼니랜드,퍼니랜드,,needs_review
+to_go,Sheet2,167,1 - 5.,1 - 5. | 지분 파트너쉽,지분 파트너쉽,needs_review
+to_go,Sheet2,168,서울언니들,서울언니들,,needs_review
+to_go,Sheet2,169,울타리몰,울타리몰,,needs_review
+to_go,Sheet2,173,1 - 6.,1 - 6. | 기타 개발 대기,기타 개발 대기,needs_review
+to_go,Sheet2,174,동일프라텍,동일프라텍,,needs_review
+to_go,Sheet2,175,골드플레이트,골드플레이트,,needs_review
+to_go,Sheet2,176,문윤모 - 플로리안,문윤모 - 플로리안,,needs_review
+to_go,Sheet2,177,황룡 - 건설 관련 AI,황룡 - 건설 관련 AI,,needs_review
+to_go,Sheet2,178,황주환,황주환,,needs_review
+to_go,Sheet2,179,한마이클 - MBK,한마이클 - MBK,,needs_review
+to_go,Sheet2,180,권혜진 -,권혜진 -,,needs_review
+to_go,Sheet2,181,이보령 -,이보령 -,,needs_review
+to_go,Sheet2,182,박혜라,박혜라,,needs_review
+to_go,Sheet2,183,이동은,이동은,,needs_review
+to_go,Sheet2,184,백찬,백찬,,needs_review
+to_go,Sheet2,185,정성휘,정성휘,,needs_review
+to_go,Sheet2,186,전희진,전희진,,needs_review
+to_go,Sheet2,187,박지영-윤지현,박지영-윤지현,,needs_review
+to_go,Sheet2,192,1 - 7.,1 - 7. | 신규 고객 개발,신규 고객 개발,needs_review
+to_go,Sheet2,193,세미나 웍샵,세미나 웍샵,,needs_review
+to_go,Sheet2,194,웹사이트,웹사이트,,needs_review
+to_go,Sheet2,195,네트웍,"네트웍 | Alignment Day 참석자 및 다른 네트웍으로 통해서, 신규 고객 개발","Alignment Day 참석자 및 다른 네트웍으로 통해서, 신규 고객 개발",needs_review
+to_go,Sheet2,197,이우석,이우석,,needs_review
+to_go,Sheet2,198,조민식,조민식,,needs_review
+to_go,Sheet2,199,백찬,백찬,,needs_review
+to_go,Sheet2,200,정우열,정우열,,needs_review
+to_go,Sheet2,201,최성찬,최성찬,,needs_review
+to_go,Sheet2,202,손제희,손제희,,needs_review
+to_go,Sheet2,203,등등,등등,,needs_review
+to_go,Sheet2,205,2,2 | 증자,증자,needs_review
+to_go,Sheet2,206,증자 제안서 완성,증자 제안서 완성,,likely_task
+to_go,Sheet2,207,일정,일정,,likely_task
+to_go,Sheet2,208,누구에게,누구에게,,needs_review
+to_go,Sheet2,210,3,3 | 엔젤 투자 조합 결성,엔젤 투자 조합 결성,needs_review
+to_go,Sheet2,211,조합 결성 제안 IR 작성,조합 결성 제안 IR 작성,,likely_task
+to_go,Sheet2,212,일정,일정,,likely_task
+to_go,Sheet2,213,누구에게,누구에게,,needs_review
+to_go,Sheet2,214,David Moon,David Moon | 플링캐스트 | 닥터프레소,닥터프레소,needs_review
+to_go,Sheet2,216,4,"4 | 내부 메뉴 정리, 가격 조건 정리.  업무 절차, 규정, 양식, 일정 관리, 인사, 조직, 권한, 책임 정리 정돈 확정","내부 메뉴 정리, 가격 조건 정리.  업무 절차, 규정, 양식, 일정 관리, 인사, 조직, 권한, 책임 정리 정돈 확정",likely_task
+to_go,Sheet2,217,일정,일정 | 작성 | 내부 최종 점검 | 내부 최종 승인,내부 최종 승인,likely_task
+to_go,Sheet2,222,5,5 | 파트너 정리 정돈과 확충,파트너 정리 정돈과 확충,needs_review
+to_go,Sheet2,223,현재 파트너 조직,현재 파트너 조직,,needs_review
+to_go,Sheet2,226,신규 파트너,신규 파트너,,needs_review
+to_go,Sheet2,227,CIC,CIC,,needs_review
+to_go,Sheet2,228,이정택,이정택,,needs_review
+to_go,Sheet2,229,박선영,박선영,,needs_review
+to_go,Sheet2,230,김낙균,김낙균,,needs_review
+to_go,Sheet2,231,강승순,강승순,,needs_review
+to_go,Sheet2,232,이연정,이연정,,needs_review
+to_go,Sheet2,233,하성호,하성호,,needs_review
+to_go,Sheet2,234,최성찬,최성찬,,needs_review
+to_go,Sheet2,236,김태정,김태정,,needs_review
+to_go,Sheet2,237,김주연,김주연,,needs_review
+to_go,Sheet2,239,온상훈,온상훈,,needs_review
+to_go,Sheet2,241,미션,미션,,needs_review
+to_go,Sheet2,243,배수규,배수규,,needs_review
+to_go,Sheet2,245,메타프롭,메타프롭,,needs_review
+to_go,Sheet2,246,블리츠스케일링,블리츠스케일링,,needs_review
+to_go,Sheet2,247,최철만,최철만,,needs_review
+to_go,Sheet2,248,오수혁,오수혁,,needs_review
+to_go,Sheet2,249,장동헌,장동헌,,needs_review
+to_go,Sheet2,252,6,6 | 창업,창업,needs_review
+to_go,Sheet2,253,우동코,우동코,,needs_review
+to_go,Sheet2,255,시니어 용품,시니어 용품,,needs_review

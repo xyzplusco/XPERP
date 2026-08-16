@@ -7,10 +7,11 @@ import { createBrowserClient } from "@supabase/ssr";
 type AuthState = "checking" | "signed-in" | "signed-out";
 
 function getClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+  return createBrowserClient(supabaseUrl, supabaseAnonKey);
 }
 
 export function AuthButton() {
@@ -18,6 +19,10 @@ export function AuthButton() {
 
   useEffect(() => {
     const supabase = getClient();
+    if (!supabase) {
+      setAuthState("signed-out");
+      return;
+    }
 
     supabase.auth.getUser().then(({ data }) => {
       setAuthState(data.user ? "signed-in" : "signed-out");
@@ -34,6 +39,10 @@ export function AuthButton() {
 
   async function signOut() {
     const supabase = getClient();
+    if (!supabase) {
+      window.location.assign("/login");
+      return;
+    }
     await supabase.auth.signOut();
     window.location.assign("/login");
   }

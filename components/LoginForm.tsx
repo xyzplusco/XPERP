@@ -12,18 +12,21 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const isConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
   const supabase = useMemo(
-    () =>
-      createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
-      ),
-    [],
+    () => (supabaseUrl && supabaseAnonKey ? createBrowserClient(supabaseUrl, supabaseAnonKey) : null),
+    [supabaseAnonKey, supabaseUrl],
   );
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!supabase) {
+      setMessage("Supabase 환경변수가 설정되어 있지 않습니다.");
+      return;
+    }
     setIsSubmitting(true);
     setMessage("");
 
@@ -39,6 +42,14 @@ export function LoginForm() {
     }
 
     window.location.assign(safeNextPath);
+  }
+
+  if (!isConfigured) {
+    return (
+      <div className="formMessage" role="alert">
+        Supabase URL과 공개 키가 설정되어야 로그인할 수 있습니다.
+      </div>
+    );
   }
 
   return (

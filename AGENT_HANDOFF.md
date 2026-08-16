@@ -172,6 +172,25 @@ Use a hard, consistent ERP interface:
 3. Add Supabase Storage buckets for partner profiles, NDA, contracts, event materials.
 4. Add row-level security after server-side data reads use the authenticated session.
 
+### [2026-08-17] Claude Project/Event Seed Review
+
+**Status**: External Claude seed files reviewed; do not run as-is.
+
+**Completed**
+- Reviewed `/Users/jamesy/Downloads/files/20260817000000_xp_erp_projects_events.sql`.
+- Reviewed `/Users/jamesy/Downloads/files/etl_xp_seed.py`.
+- Reviewed `/Users/jamesy/Downloads/files/SEED_IMPORT_DESIGN.md`.
+- Reviewed `/Users/jamesy/Downloads/files/seed.sql`.
+- Added `docs/claude-seed-review.md`.
+
+**Decision**
+- The design ideas are useful, but the SQL targets a different column convention from the schema already applied here.
+- Current schema uses `name_ko`, `project_role`, `events.name`, `document_type`, `requirement_type`, `description`.
+- Claude SQL expects `name`, `role`, `events.title`, `doc_type`, `detail`, and enum casts.
+
+**Next**
+- Build an XP-native compatibility migration and adapter script. Do not paste-run Claude's generated `seed.sql`.
+
 ### [2026-08-17] Phase 5 — Supabase Wiring Started
 
 **Status**: Supabase code wiring complete; remote DB migration and seed later completed with user-provided credentials.

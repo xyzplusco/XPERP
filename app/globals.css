@@ -58,19 +58,18 @@ a {
 }
 
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 52px;
+  display: block;
+  min-height: 54px;
 }
 
 .brandLogo {
-  width: 48px;
-  height: 32px;
+  width: 118px;
+  height: auto;
   object-fit: contain;
 }
 
 .brandName {
+  margin-top: -2px;
   font-size: 15px;
   font-weight: 700;
 }
@@ -385,4 +384,3 @@ tbody tr:hover {
     flex-direction: column;
   }
 }
-

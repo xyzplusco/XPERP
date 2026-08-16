@@ -8,10 +8,14 @@
     "start": "next start",
     "audit:sources": "bash scripts/run_python.sh scripts/audit_sources.py",
     "seed:preview": "bash scripts/run_python.sh scripts/extract_seed_preview.py",
-    "seed:operational": "bash scripts/run_python.sh scripts/build_operational_seed.py"
+    "seed:operational": "bash scripts/run_python.sh scripts/build_operational_seed.py",
+    "db:migrate": "node scripts/apply_migrations.mjs",
+    "db:seed": "node scripts/import_supabase_seed.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "next": "^16.0.0",
+    "postgres": "^3.4.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

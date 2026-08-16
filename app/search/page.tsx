@@ -2,34 +2,34 @@ import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getSearchRows } from "@/lib/operational-data";
 
-export default function SearchPage() {
-  const taskRows = getSearchRows(16);
+export default async function SearchPage() {
+  const taskRows = await getSearchRows(16);
 
   return (
     <>
       <SectionHeader
-        eyebrow="Search"
-        title="Cross-entity operating search"
-        description="Search must include names, companies, projects, events, documents, document requirements, weekly updates, source rows, and tasks."
+        eyebrow="검색"
+        title="통합 운영 검색"
+        description="이름, 회사, 프로젝트, 이벤트, 문서, 문서 필요 항목, 주차별 업데이트, 원본 행, 액션을 함께 검색해야 합니다."
       />
       <input
         className="searchBox"
-        aria-label="Search XP ERP"
-        placeholder="Search people, companies, documents, weekly updates, tasks..."
+        aria-label="XP ERP 검색"
+        placeholder="사람, 회사, 문서, 주차별 업데이트, 액션 검색..."
       />
       <section className="panel">
         <div className="panelHeader">
           <div>
-            <div className="panelTitle">Example action results</div>
-            <div className="panelMeta">Task rows are first-class search results</div>
+            <div className="panelTitle">액션 검색 결과</div>
+            <div className="panelMeta">액션도 통합 검색의 핵심 결과입니다</div>
           </div>
         </div>
         <DataTable
           columns={[
-            { key: "title", label: "Result" },
-            { key: "owner", label: "Owner" },
-            { key: "link", label: "Area" },
-            { key: "status", label: "Status" },
+            { key: "title", label: "결과" },
+            { key: "owner", label: "담당" },
+            { key: "link", label: "영역" },
+            { key: "status", label: "상태" },
           ]}
           rows={taskRows}
         />

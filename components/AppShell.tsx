@@ -7,11 +7,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="sidebar" aria-label="Main navigation">
         <div className="brand">
           <img src="/logo.png" alt="XP" className="brandLogo" />
-          <div>
-            <div className="brandName">XP ERP</div>
-            <div className="brandMeta">Internal operations</div>
-          </div>
         </div>
+        <div className="brandName">XP Dashboard</div>
         <nav className="navList">
           {navigationItems.map((item) => (
             <Link key={item.href} href={item.href} className="navItem">
@@ -20,19 +17,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="sidebarFooter">
-          <span>Source controlled</span>
-          <strong>4 workbooks</strong>
+          <span>데이터 소스</span>
+          <strong>Supabase</strong>
         </div>
       </aside>
       <div className="mainColumn">
         <header className="topbar">
           <div>
-            <div className="topbarLabel">XP Internal ERP</div>
-            <h1>Operational control workspace</h1>
+            <div className="topbarLabel">XP Dashboard</div>
+            <h1>운영 관리 대시보드</h1>
           </div>
           <div className="topbarActions">
-            <button className="secondaryButton" type="button">Import review</button>
-            <button className="primaryButton" type="button">New action</button>
+            <button className="secondaryButton" type="button">가져오기 검토</button>
+            <button className="primaryButton" type="button">새 액션</button>
           </div>
         </header>
         <main className="content">{children}</main>
@@ -40,4 +37,3 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-

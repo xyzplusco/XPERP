@@ -1,10 +1,9 @@
 export const navigationItems = [
-  { href: "/", label: "Dashboard" },
-  { href: "/network", label: "Network" },
-  { href: "/projects", label: "Projects" },
-  { href: "/events", label: "Events" },
-  { href: "/documents", label: "Documents" },
-  { href: "/search", label: "Search" },
-  { href: "/settings", label: "Settings" },
+  { href: "/", label: "대시보드" },
+  { href: "/network", label: "네트워크" },
+  { href: "/projects", label: "프로젝트" },
+  { href: "/events", label: "이벤트" },
+  { href: "/documents", label: "문서" },
+  { href: "/search", label: "검색" },
+  { href: "/settings", label: "설정" },
 ];
-

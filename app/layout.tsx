@@ -3,8 +3,8 @@ import "./globals.css";
 import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "XP Internal ERP",
-  description: "Network, project, event, document, and task operations for XP.",
+  title: "XP Dashboard",
+  description: "XP 네트워크, 프로젝트, 이벤트, 문서, 액션 관리 대시보드.",
 };
 
 export default function RootLayout({
@@ -20,4 +20,3 @@ export default function RootLayout({
     </html>
   );
 }
-

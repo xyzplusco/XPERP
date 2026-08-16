@@ -6,11 +6,13 @@ import {
   getTaskRows,
 } from "@/lib/operational-data";
 
-export default function DashboardPage() {
-  const sourceStats = getSourceStats();
-  const activeProjects = getProjectRows(8);
-  const documentGaps = getDocumentRequirementRows(8);
-  const taskRows = getTaskRows(8);
+export default async function DashboardPage() {
+  const [sourceStats, activeProjects, documentGaps, taskRows] = await Promise.all([
+    getSourceStats(),
+    getProjectRows(8),
+    getDocumentRequirementRows(8),
+    getTaskRows(8),
+  ]);
 
   return (
     <>
@@ -28,18 +30,18 @@ export default function DashboardPage() {
         <div className="panel">
           <div className="panelHeader">
             <div>
-              <div className="panelTitle">Active project control</div>
-              <div className="panelMeta">PL/PM, project type, next action</div>
+              <div className="panelTitle">진행 프로젝트 관리</div>
+              <div className="panelMeta">PL/PM, 프로젝트 유형, 다음 액션</div>
             </div>
             <div className="accentLine" />
           </div>
           <DataTable
             columns={[
-              { key: "company", label: "Company" },
-              { key: "type", label: "Type" },
+              { key: "company", label: "회사" },
+              { key: "type", label: "유형" },
               { key: "pl", label: "PL" },
               { key: "pm", label: "PM" },
-              { key: "next", label: "Next action" },
+              { key: "next", label: "다음 액션" },
             ]}
             rows={activeProjects}
           />
@@ -48,17 +50,17 @@ export default function DashboardPage() {
         <div className="panel">
           <div className="panelHeader">
             <div>
-              <div className="panelTitle">Document gaps</div>
-              <div className="panelMeta">NDA, profile, appointment, MOU</div>
+              <div className="panelTitle">문서 미비 항목</div>
+              <div className="panelMeta">NDA, 프로필, 위촉, MOU</div>
             </div>
           </div>
           <DataTable
             columns={[
-              { key: "subject", label: "Subject" },
-              { key: "type", label: "Type" },
-              { key: "owner", label: "Owner" },
-              { key: "status", label: "Status" },
-              { key: "due", label: "Due" },
+              { key: "subject", label: "대상" },
+              { key: "type", label: "문서" },
+              { key: "owner", label: "담당" },
+              { key: "status", label: "상태" },
+              { key: "due", label: "기한" },
             ]}
             rows={documentGaps}
           />
@@ -68,16 +70,16 @@ export default function DashboardPage() {
       <section className="panel">
         <div className="panelHeader">
           <div>
-            <div className="panelTitle">Next actions</div>
-            <div className="panelMeta">Imported from To Go List and attached to operating entities</div>
+            <div className="panelTitle">다음 액션</div>
+            <div className="panelMeta">Supabase에 적재된 운영 액션</div>
           </div>
         </div>
         <DataTable
           columns={[
-            { key: "title", label: "Action" },
-            { key: "owner", label: "Owner" },
-            { key: "link", label: "Linked area" },
-            { key: "status", label: "Status" },
+            { key: "title", label: "액션" },
+            { key: "owner", label: "담당" },
+            { key: "link", label: "연결" },
+            { key: "status", label: "상태" },
           ]}
           rows={taskRows}
         />

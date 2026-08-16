@@ -7,7 +7,7 @@
 | Item | Current State |
 |---|---|
 | Product | XP internal ERP for network, projects, events, documents, tasks, and search |
-| Current phase | Phase 3 — Seed Extraction & Reconciliation |
+| Current phase | Phase 5 — Supabase Connection |
 | Previous issue | Old plan treated Documents & Tasks as Phase 10 / optional. That is wrong. |
 | UI direction | Dense B2C SaaS/ERP, one primary green, restrained accent, no traffic-light AI badge styling |
 | Primary color | `#1a3c2c` |
@@ -36,7 +36,7 @@ Phase 1R Spec Correction & Source Audit          ✅ 완료
 Phase 2  Database Schema & Import Contracts      ✅ 완료
 Phase 3  Seed Extraction & Reconciliation        🔄 진행 중
 Phase 4  App Scaffold & Design System            ✅ 완료
-Phase 5  Auth, Permissions, Document Storage     ⬜ 대기
+Phase 5  Auth, Permissions, Document Storage     🔄 진행 중
 Phase 6  Network Module                          ⬜ 대기
 Phase 7  Project Module                          ⬜ 대기
 Phase 8  Event Module                            ⬜ 대기
@@ -151,6 +151,37 @@ Use a hard, consistent ERP interface:
 - no AI dashboard aesthetic
 
 ## 9. Handoff Log
+
+### [2026-08-17] Phase 5 — Supabase Wiring Started
+
+**Status**: Supabase code wiring complete; remote DB apply blocked on missing credentials.
+
+**Completed**
+- Replaced the dark-looking transparent logo with the provided white-background logo.
+- Converted visible ERP UI copy to Korean.
+- Sidebar now shows only the XP logo and `XP Dashboard`.
+- Added Supabase packages: `@supabase/supabase-js`, `postgres`.
+- Added `.env.example` with the provided project URL.
+- Added `supabase/migrations/20260817000000_initial_schema.sql`.
+- Added `scripts/apply_migrations.mjs` and `scripts/import_supabase_seed.mjs`.
+- App data layer now reads Supabase views instead of importing the local seed JSON directly.
+- If Supabase env vars are missing, the UI does not show mock data.
+
+**Validation**
+- `npm run build` passed.
+- `npm run seed:operational` passed.
+- `npm run db:migrate` and `npm run db:seed` correctly stop with `SUPABASE_DB_URL is required`.
+
+**Blocked**
+- Need `SUPABASE_DB_URL` to apply migrations and import seed data.
+- Need `NEXT_PUBLIC_SUPABASE_ANON_KEY` for the app to read Supabase views.
+
+**Next**
+1. Add `SUPABASE_DB_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+2. Run `npm run db:migrate`.
+3. Run `npm run seed:operational`.
+4. Run `npm run db:seed`.
+5. Run `npm run build`.
 
 ### [2026-08-17] Phase 3 — Operational Seed Preview Wired
 

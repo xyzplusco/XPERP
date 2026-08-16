@@ -2,30 +2,30 @@ import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
 import { getEventRows } from "@/lib/operational-data";
 
-export default function EventsPage() {
-  const eventRows = getEventRows(14);
+export default async function EventsPage() {
+  const eventRows = await getEventRows(14);
 
   return (
     <>
       <SectionHeader
-        eyebrow="Events"
-        title="Invitation and meeting operations"
-        description="Events are spreadsheet-like operating lists for invitations, responses, attendance, and follow-up actions."
+        eyebrow="이벤트"
+        title="초대 및 모임 운영"
+        description="이벤트는 초대, 회신, 참석 여부, 후속 액션을 빠르게 갱신하는 운영 테이블입니다."
       />
       <section className="panel">
         <div className="panelHeader">
           <div>
-            <div className="panelTitle">Event workbench</div>
-            <div className="panelMeta">Owner, invitee set, state, next action</div>
+            <div className="panelTitle">이벤트 워크벤치</div>
+            <div className="panelMeta">담당, 초대 대상, 상태, 다음 액션</div>
           </div>
         </div>
         <DataTable
           columns={[
-            { key: "event", label: "Event" },
-            { key: "owner", label: "Owner" },
-            { key: "invitees", label: "Invitees" },
-            { key: "state", label: "State" },
-            { key: "next", label: "Next action" },
+            { key: "event", label: "이벤트" },
+            { key: "owner", label: "담당" },
+            { key: "invitees", label: "초대 대상" },
+            { key: "state", label: "상태" },
+            { key: "next", label: "다음 액션" },
           ]}
           rows={eventRows}
         />

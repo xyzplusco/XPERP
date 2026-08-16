@@ -21,16 +21,21 @@ export function DataTable<T extends Record<string, string>>({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
-              {columns.map((column) => (
-                <td key={String(column.key)}>{row[column.key]}</td>
-              ))}
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={columns.length}>표시할 데이터가 없습니다.</td>
             </tr>
-          ))}
+          ) : (
+            rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                {columns.map((column) => (
+                  <td key={String(column.key)}>{row[column.key]}</td>
+                ))}
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
   );
 }
-

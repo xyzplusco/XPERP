@@ -7,7 +7,7 @@
 | Item | Current State |
 |---|---|
 | Product | XP internal ERP for network, projects, events, documents, tasks, and search |
-| Current phase | Phase 1R — Spec Correction & Source Audit |
+| Current phase | Phase 3 — Seed Extraction & Reconciliation |
 | Previous issue | Old plan treated Documents & Tasks as Phase 10 / optional. That is wrong. |
 | UI direction | Dense B2C SaaS/ERP, one primary green, restrained accent, no traffic-light AI badge styling |
 | Primary color | `#1a3c2c` |
@@ -32,10 +32,10 @@ Documents and tasks are v1 core. Do not postpone them.
 ## 2. Revised Phase Roadmap
 
 ```text
-Phase 1R Spec Correction & Source Audit          🔄 진행 중
-Phase 2  Database Schema & Import Contracts      ⬜ 대기
-Phase 3  Seed Extraction & Reconciliation        ⬜ 대기
-Phase 4  App Scaffold & Design System            ⬜ 대기
+Phase 1R Spec Correction & Source Audit          ✅ 완료
+Phase 2  Database Schema & Import Contracts      ✅ 완료
+Phase 3  Seed Extraction & Reconciliation        🔄 진행 중
+Phase 4  App Scaffold & Design System            ✅ 완료
 Phase 5  Auth, Permissions, Document Storage     ⬜ 대기
 Phase 6  Network Module                          ⬜ 대기
 Phase 7  Project Module                          ⬜ 대기
@@ -152,6 +152,28 @@ Use a hard, consistent ERP interface:
 
 ## 9. Handoff Log
 
+### [2026-08-17] Phase 3 — Operational Seed Preview Wired
+
+**Status**: Phase 3 in progress.
+
+**Completed**
+- Added `scripts/build_operational_seed.py`.
+- Generated `data/processed/operational_seed_preview.json`.
+- Wired the Next.js pages to real source-derived operational seed data instead of mock constants.
+- Dashboard, Network, Projects, Events, Documents, and Search now render from the generated seed preview.
+
+**Validation**
+- `npm run build` passed.
+- Operational seed generated 435 people, 195 projects, 157 tasks, 245 document requirements.
+
+**Next**
+1. Add Supabase project configuration/migrations under `supabase/`.
+2. Convert seed preview into idempotent DB import scripts.
+3. Add real list/detail routes backed by database queries.
+
+**Warning**
+- Current seed parsing is conservative and review-oriented. Do not treat every extracted row as clean production truth without reconciliation.
+
 ### [2026-08-17] Phase 1R — Critical Spec Review Started
 
 **Status**: Phase 1R in progress.
@@ -173,4 +195,3 @@ Use a hard, consistent ERP interface:
 - Do not skip Documents & Tasks.
 - Do not use the cleaned partner file as the only partner truth.
 - Do not make a colorful CRM UI.
-

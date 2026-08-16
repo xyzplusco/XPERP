@@ -1,8 +1,10 @@
 import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
-import { eventRows } from "@/lib/mock-data";
+import { getEventRows } from "@/lib/operational-data";
 
 export default function EventsPage() {
+  const eventRows = getEventRows(14);
+
   return (
     <>
       <SectionHeader
@@ -31,4 +33,3 @@ export default function EventsPage() {
     </>
   );
 }
-

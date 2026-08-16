@@ -1,8 +1,10 @@
 import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
-import { documentGaps } from "@/lib/mock-data";
+import { getDocumentRequirementRows } from "@/lib/operational-data";
 
 export default function DocumentsPage() {
+  const documentGaps = getDocumentRequirementRows(24);
+
   return (
     <>
       <SectionHeader
@@ -38,4 +40,3 @@ export default function DocumentsPage() {
     </>
   );
 }
-

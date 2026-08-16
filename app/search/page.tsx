@@ -1,8 +1,10 @@
 import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
-import { taskRows } from "@/lib/mock-data";
+import { getSearchRows } from "@/lib/operational-data";
 
 export default function SearchPage() {
+  const taskRows = getSearchRows(16);
+
   return (
     <>
       <SectionHeader
@@ -35,4 +37,3 @@ export default function SearchPage() {
     </>
   );
 }
-

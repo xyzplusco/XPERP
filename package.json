@@ -6,8 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "audit:sources": "python3 scripts/audit_sources.py",
-    "seed:preview": "python3 scripts/extract_seed_preview.py"
+    "audit:sources": "bash scripts/run_python.sh scripts/audit_sources.py",
+    "seed:preview": "bash scripts/run_python.sh scripts/extract_seed_preview.py",
+    "seed:operational": "bash scripts/run_python.sh scripts/build_operational_seed.py"
   },
   "dependencies": {
     "next": "^16.0.0",
@@ -21,4 +22,3 @@
     "typescript": "^5.6.0"
   }
 }
-

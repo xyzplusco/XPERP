@@ -292,7 +292,6 @@ def main() -> None:
         raise SystemExit("Missing source files:\n" + "\n".join(missing))
 
     report = {
-        "generated_at": dt.datetime.now(dt.UTC).isoformat(),
         "cleaned_partners": audit_cleaned_partners(SOURCES["cleaned_partners"]),
         "deal_list": audit_deal_list(SOURCES["deal_list"]),
         "network_original": audit_network_original(SOURCES["network_original"]),

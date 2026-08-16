@@ -1,7 +1,17 @@
 import { DataTable } from "@/components/DataTable";
-import { activeProjects, documentGaps, sourceStats, taskRows } from "@/lib/mock-data";
+import {
+  getDocumentRequirementRows,
+  getProjectRows,
+  getSourceStats,
+  getTaskRows,
+} from "@/lib/operational-data";
 
 export default function DashboardPage() {
+  const sourceStats = getSourceStats();
+  const activeProjects = getProjectRows(8);
+  const documentGaps = getDocumentRequirementRows(8);
+  const taskRows = getTaskRows(8);
+
   return (
     <>
       <section className="gridStats" aria-label="Source stats">
@@ -75,4 +85,3 @@ export default function DashboardPage() {
     </>
   );
 }
-

@@ -1,8 +1,11 @@
 import { DataTable } from "@/components/DataTable";
 import { SectionHeader } from "@/components/SectionHeader";
-import { activeProjects } from "@/lib/mock-data";
+import { getProjectRows, getProjectTypeSummary } from "@/lib/operational-data";
 
 export default function ProjectsPage() {
+  const activeProjects = getProjectRows(18);
+  const projectTypeSummary = getProjectTypeSummary();
+
   return (
     <>
       <SectionHeader
@@ -11,11 +14,11 @@ export default function ProjectsPage() {
         description="Project rows should preserve Deal list lineage, weekly updates, PL/PM ownership, document requirements, and next actions."
       />
       <div className="toolbar" aria-label="Project filters">
-        <span className="filterPill" data-selected="true">All active</span>
-        <span className="filterPill">Re-engineering</span>
-        <span className="filterPill">Investment</span>
-        <span className="filterPill">Business building</span>
-        <span className="filterPill">Go Global</span>
+        {projectTypeSummary.map((row, index) => (
+          <span className="filterPill" data-selected={index === 0 ? "true" : undefined} key={row.type}>
+            {row.type} {row.count}
+          </span>
+        ))}
       </div>
       <section className="panel">
         <div className="panelHeader">
@@ -38,4 +41,3 @@ export default function ProjectsPage() {
     </>
   );
 }
-

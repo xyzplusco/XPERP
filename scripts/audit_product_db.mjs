@@ -51,13 +51,22 @@ try {
     left join projects p on p.company_id = c.id
     left join tasks t on t.company_id = c.id or t.project_id = p.id
     left join document_requirements dr on dr.company_id = c.id or dr.project_id = p.id
+    where c.name_ko <> '회사명'
     group by c.id, c.name_ko
     having count(distinct p.id) > 0
     order by count(distinct p.id) desc, c.name_ko asc
     limit 12
   `;
 
-  console.log(JSON.stringify({ counts, linkage, sampleCustomers: samples }, null, 2));
+  const [quality] = await sql`
+    select
+      (select count(*)::int from companies where name_ko = '회사명') as header_companies,
+      (select count(*)::int from projects p left join companies c on c.id = p.company_id where c.name_ko = '회사명') as header_projects,
+      (select count(*)::int from companies where name_ko ~ '^[A-Z]사$') as anonymized_companies,
+      (select count(*)::int from projects p left join companies c on c.id = p.company_id where c.name_ko ~ '^[A-Z]사$') as anonymized_projects
+  `;
+
+  console.log(JSON.stringify({ counts, linkage, dataQuality: quality, sampleCustomers: samples }, null, 2));
 } finally {
   await sql.end();
 }

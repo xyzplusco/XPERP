@@ -7,7 +7,7 @@
 | Item | Current State |
 |---|---|
 | Product | XP internal ERP for network, projects, events, documents, tasks, and search |
-| Current phase | Demo access + DB shaping |
+| Current phase | Actual product DB reconciliation + handoff |
 | Previous issue | Old plan treated Documents & Tasks as Phase 10 / optional. That is wrong. |
 | UI direction | Dense B2C SaaS/ERP, one primary green, restrained accent, no traffic-light AI badge styling |
 | Primary color | `#1a3c2c` |
@@ -15,6 +15,36 @@
 | Logo | `assets/logo.png` |
 | Source files | 4 Excel files, not 2 |
 | Backend recommendation | Supabase unless user says otherwise |
+| Full agent log | [`AGENT_LOG.md`](./AGENT_LOG.md) |
+
+## 0.1 Latest Reality Check
+
+The project is not production-ready. It is a real Next.js/Supabase scaffold with imported source data and one approved reconciliation pass applied.
+
+Current live DB after reconciliation:
+
+| Item | Count / State |
+|---|---:|
+| companies | 463 |
+| people | 435 |
+| projects | 195 |
+| tasks | 151 |
+| document_requirements | 245 |
+| documents | 0 |
+| event_invitees | 0 |
+| enriched companies | 105 |
+| linked tasks | 98 / 151 |
+| linked project PL | 63 / 195 |
+| linked project PM | 34 / 195 |
+
+Critical remaining gaps:
+
+- Auth/login is currently disabled for direct demo access.
+- Actual uploaded document storage is not implemented.
+- Event invitees are not imported.
+- Anonymous `A사/B사/...` M&A rows remain and need a confidential deal/codename policy.
+- Import/reconciliation is still heuristic and needs a review queue.
+- Do not use seed fallback as product behavior; it only works when `XP_FORCE_SEED_FALLBACK=1`.
 
 ## 1. Critical Product Correction
 

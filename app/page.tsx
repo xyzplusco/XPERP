@@ -1,16 +1,19 @@
 import { DataTable } from "@/components/DataTable";
 import {
+  getCustomerRows,
   getDocumentRequirementRows,
   getProjectRows,
   getSourceStats,
   getTaskRows,
 } from "@/lib/operational-data";
+import { CustomerTable } from "@/components/CustomerTable";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [sourceStats, activeProjects, documentGaps, taskRows] = await Promise.all([
+  const [sourceStats, customerRows, activeProjects, documentGaps, taskRows] = await Promise.all([
     getSourceStats(),
+    getCustomerRows(8),
     getProjectRows(8),
     getDocumentRequirementRows(8),
     getTaskRows(8),
@@ -67,6 +70,16 @@ export default async function DashboardPage() {
             rows={documentGaps}
           />
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="panelHeader">
+          <div>
+            <div className="panelTitle">고객사별 Deal 관리</div>
+            <div className="panelMeta">Deals_0731 회사명 → 고객사 ID → 연결 프로젝트</div>
+          </div>
+        </div>
+        <CustomerTable rows={customerRows} />
       </section>
 
       <section className="panel">

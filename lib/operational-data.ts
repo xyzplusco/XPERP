@@ -12,7 +12,7 @@ function getSupabase() {
   });
 }
 
-function ko(value: string | null | undefined) {
+export function ko(value: string | null | undefined) {
   const map: Record<string, string> = {
     unknown: "미분류",
     xp_internal: "XP 내부",
@@ -51,6 +51,8 @@ function ko(value: string | null | undefined) {
     in_progress: "진행 중",
     waiting: "대기 중",
     blocked: "막힘",
+    Review: "검토",
+    review: "검토",
   };
   if (!value) return "";
   return map[value] ?? value;
@@ -113,6 +115,89 @@ export async function getNetworkRows(limit = 12) {
     company: row.company || "미지정",
     role: row.role || "검토",
     docs: row.docs || "확인 필요",
+  }));
+}
+
+export async function getCustomerRows(limit = 24) {
+  const rows = await readView<Row>("erp_customer_rows", limit);
+  return rows.map((row) => ({
+    id: row.id || "",
+    customerId: row.customer_id || "",
+    customer: row.customer || "",
+    industry: row.industry || "미지정",
+    projects: String(row.project_count ?? "0"),
+    contracts: String(row.contract_count ?? "0"),
+    docs: String(row.document_gap_count ?? "0"),
+    tasks: String(row.task_count ?? "0"),
+    status: ko(row.latest_status),
+    next: row.next_action || "다음 액션 검토",
+  }));
+}
+
+export async function getCustomerDetail(customerId: string) {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("erp_customer_rows")
+    .select("*")
+    .eq("id", customerId)
+    .single();
+
+  if (error) {
+    console.error("Supabase customer read failed", error.message);
+    return null;
+  }
+
+  return data as Row;
+}
+
+export async function getCustomerProjectRows(customerId: string, limit = 30) {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("erp_customer_project_rows")
+    .select("*")
+    .eq("customer_row_id", customerId)
+    .limit(limit);
+
+  if (error) {
+    console.error("Supabase customer project read failed", error.message);
+    return [];
+  }
+
+  return ((data ?? []) as Row[]).map((row) => ({
+    project: row.project || "",
+    type: ko(row.type),
+    status: ko(row.status),
+    pl: row.pl || "검토",
+      pm: row.pm || "검토",
+      contract: ko(row.contract_status) || "검토",
+      next: row.next_action || "다음 액션 검토",
+  }));
+}
+
+export async function getCustomerDocumentRows(customerId: string, limit = 20) {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("document_requirements")
+    .select("title, requirement_type, status, required_by, expires_at, project_id, company_id")
+    .or(`company_id.eq.${customerId}`)
+    .limit(limit);
+
+  if (error) {
+    console.error("Supabase customer document read failed", error.message);
+    return [];
+  }
+
+  return ((data ?? []) as Row[]).map((row) => ({
+    title: row.title || "",
+    type: row.requirement_type || "",
+    status: ko(row.status),
+    due: row.required_by || row.expires_at || "검토",
   }));
 }
 

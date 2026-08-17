@@ -205,6 +205,22 @@ Use a hard, consistent ERP interface:
 - Demo should open directly to the XP Dashboard without requiring a Supabase Auth user.
 - Re-enable login after at least one Supabase Auth user and role policy are ready.
 
+### [2026-08-17] Customer-Centered Deal Structure
+
+**Status**: Customer menu and customer DB views added.
+
+**Completed**
+- Added `고객사` navigation.
+- Added `/customers` list page.
+- Added `/customers/[id]` detail page.
+- Added `erp_customer_rows` and `erp_customer_project_rows` views.
+- Added `docs/customer-db-blueprint.md`.
+
+**Decision**
+- `companies.id` is the customer ID.
+- `projects.company_id` is the first contract/deal/project link.
+- Do not create a standalone `contracts` table yet. Use `projects` for deal/contract workflow and `documents` / `document_requirements` for actual contract files.
+
 ### [2026-08-17] Phase 5 — Supabase Wiring Started
 
 **Status**: Supabase code wiring complete; remote DB migration and seed later completed with user-provided credentials.

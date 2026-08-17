@@ -1,5 +1,6 @@
 export const navigationItems = [
   { href: "/", label: "대시보드" },
+  { href: "/customers", label: "고객사" },
   { href: "/network", label: "네트워크" },
   { href: "/projects", label: "프로젝트" },
   { href: "/events", label: "이벤트" },

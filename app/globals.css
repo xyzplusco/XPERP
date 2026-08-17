@@ -111,6 +111,15 @@ a {
   color: var(--primary);
 }
 
+.tableLink {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.tableLink:hover {
+  text-decoration: underline;
+}
+
 .sidebarFooter {
   margin-top: auto;
   display: grid;

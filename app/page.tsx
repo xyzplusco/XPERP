@@ -86,7 +86,7 @@ export default async function DashboardPage() {
         <div className="panelHeader">
           <div>
             <div className="panelTitle">다음 액션</div>
-            <div className="panelMeta">Supabase에 적재된 운영 액션</div>
+            <div className="panelMeta">To Go List에서 정리한 운영 액션</div>
           </div>
         </div>
         <DataTable

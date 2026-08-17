@@ -7,7 +7,7 @@
 | Item | Current State |
 |---|---|
 | Product | XP internal ERP for network, projects, events, documents, tasks, and search |
-| Current phase | Phase 5 — Auth, Permissions, Document Storage |
+| Current phase | Demo access + DB shaping |
 | Previous issue | Old plan treated Documents & Tasks as Phase 10 / optional. That is wrong. |
 | UI direction | Dense B2C SaaS/ERP, one primary green, restrained accent, no traffic-light AI badge styling |
 | Primary color | `#1a3c2c` |
@@ -190,6 +190,20 @@ Use a hard, consistent ERP interface:
 
 **Next**
 - Build an XP-native compatibility migration and adapter script. Do not paste-run Claude's generated `seed.sql`.
+
+### [2026-08-17] Demo Access Mode
+
+**Status**: Login gate temporarily removed for demo.
+
+**Completed**
+- Removed Supabase Auth route guard from `proxy.ts`.
+- Removed `/login` page and client auth components.
+- Removed `@supabase/ssr`.
+- Added `docs/demo-database-plan.md`.
+
+**Decision**
+- Demo should open directly to the XP Dashboard without requiring a Supabase Auth user.
+- Re-enable login after at least one Supabase Auth user and role policy are ready.
 
 ### [2026-08-17] Phase 5 — Supabase Wiring Started
 

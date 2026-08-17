@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { AuthButton } from "@/components/AuthButton";
 import { navigationItems } from "@/lib/navigation";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -33,7 +32,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="topbarActions">
             <button className="secondaryButton" type="button">가져오기 검토</button>
             <button className="primaryButton" type="button">새 액션</button>
-            <AuthButton />
           </div>
         </header>
         <main className="content">{children}</main>

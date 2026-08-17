@@ -188,10 +188,6 @@ a {
   opacity: 0.62;
 }
 
-.authButton {
-  min-width: 76px;
-}
-
 .content {
   display: grid;
   gap: 20px;
@@ -356,54 +352,6 @@ tbody tr:hover {
 .searchBox:focus {
   border-color: var(--primary);
   outline: 2px solid rgba(26, 60, 44, 0.12);
-}
-
-.loginPanel {
-  width: min(460px, 100%);
-  display: grid;
-  gap: 22px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  padding: 22px;
-  box-shadow: var(--shadow);
-}
-
-.loginForm {
-  display: grid;
-  gap: 10px;
-}
-
-.fieldLabel {
-  color: #26312b;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.textInput {
-  width: 100%;
-  min-height: 42px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  padding: 0 12px;
-  color: var(--ink);
-}
-
-.textInput:focus {
-  border-color: var(--primary);
-  outline: 2px solid rgba(26, 60, 44, 0.12);
-}
-
-.formMessage {
-  margin: 2px 0 0;
-  color: #a33a2f;
-  font-size: 13px;
-}
-
-.loginSubmit {
-  margin-top: 6px;
-  width: 100%;
 }
 
 .accentLine {

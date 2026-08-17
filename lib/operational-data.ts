@@ -84,20 +84,24 @@ export async function getSourceStats() {
       { label: "Supabase", value: "미연결", detail: "환경변수 설정 필요" },
       { label: "네트워크", value: "0", detail: "DB 연결 후 표시" },
       { label: "프로젝트", value: "0", detail: "DB 연결 후 표시" },
-      { label: "문서", value: "0", detail: "DB 연결 후 표시" },
+      { label: "문서 필요", value: "0", detail: "DB 연결 후 표시" },
     ];
   }
-  const [people, projects, tasks, documents] = await Promise.all([
+  const [people, companies, projects, events, documents, tasks] = await Promise.all([
     countRows("people"),
+    countRows("companies"),
     countRows("projects"),
-    countRows("tasks"),
+    countRows("events"),
     countRows("document_requirements"),
+    countRows("tasks"),
   ]);
   return [
-    { label: "네트워크", value: String(people), detail: "Supabase people" },
-    { label: "프로젝트", value: String(projects), detail: "Supabase projects" },
-    { label: "액션", value: String(tasks), detail: "Supabase tasks" },
-    { label: "문서 필요", value: String(documents), detail: "Supabase requirements" },
+    { label: "네트워크", value: String(people), detail: "파트너/담당자" },
+    { label: "회사", value: String(companies), detail: "고객사/파트너사" },
+    { label: "프로젝트", value: String(projects), detail: "딜/운영 프로젝트" },
+    { label: "이벤트", value: String(events), detail: "미팅/출장/초대" },
+    { label: "문서 필요", value: String(documents), detail: "NDA/프로필/계약" },
+    { label: "액션", value: String(tasks), detail: "To Go List 전환" },
   ];
 }
 
@@ -146,13 +150,34 @@ export async function getDocumentRequirementRows(limit = 16) {
 }
 
 export async function getTaskRows(limit = 16) {
-  const rows = await readView<Row>("erp_task_rows", limit);
-  return rows.map((row) => ({
-    title: row.title || "",
-    owner: row.owner || "미지정",
-    link: row.link || "검토",
-    status: ko(row.status),
-  }));
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("title, description, status, project_id, event_id, company_id, person_id, document_requirement_id")
+    .order("created_at", { ascending: true })
+    .limit(limit * 4);
+
+  if (error) {
+    console.error("Supabase task read failed", error.message);
+    return [];
+  }
+
+  return ((data ?? []) as Row[])
+    .filter((row) => row.title && !/^\d+$/.test(row.title))
+    .slice(0, limit)
+    .map((row) => ({
+      title: row.title || "",
+      owner: "운영",
+      link:
+        row.document_requirement_id ? "문서" :
+        row.event_id ? "이벤트" :
+        row.project_id ? "프로젝트" :
+        row.person_id ? "네트워크" :
+        row.company_id ? "회사" :
+        "검토",
+      status: ko(row.status),
+    }));
 }
 
 export async function getSearchRows(limit = 16) {

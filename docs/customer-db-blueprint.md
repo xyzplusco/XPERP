@@ -100,10 +100,10 @@ XP ERP의 기준점은 `고객사(companies)`가 되어야 한다.
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-로컬 `.env.local`에는 값이 있어서 로컬 데모는 Supabase 데이터를 읽는다. 배포/라이브에 값이 없으면 앱은 `data/processed/operational_seed_preview.json`을 대체 데이터로 사용한다.
+로컬 `.env.local`에는 값이 있어서 로컬 데모는 Supabase 데이터를 읽는다. 배포/라이브에 값이 없으면 앱은 `DB 미연결` 상태를 표시한다.
 
 데모에서 DB 상태와 관계없이 seed 화면을 강제로 확인하려면 서버 환경변수에 아래 값을 둔다.
 
 - `XP_FORCE_SEED_FALLBACK=1`
 
-실제 운영에서는 이 값을 제거하고 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`를 반드시 넣어야 한다. seed fallback은 데모가 빈 화면이 되는 것을 막기 위한 장치이고, 문서 업로드/권한/실시간 변경 저장은 Supabase 연결 이후에만 완성된다.
+실제 운영에서는 이 값을 제거하고 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`를 반드시 넣어야 한다. seed fallback은 개발/시연 검증용 장치이고, actual product에서는 사용하지 않는다.

@@ -10,7 +10,10 @@
     "seed:preview": "bash scripts/run_python.sh scripts/extract_seed_preview.py",
     "seed:operational": "bash scripts/run_python.sh scripts/build_operational_seed.py",
     "db:migrate": "node scripts/apply_migrations.mjs",
-    "db:seed": "node scripts/import_supabase_seed.mjs"
+    "db:seed": "node scripts/import_supabase_seed.mjs",
+    "db:reconcile": "node scripts/reconcile_product_db.mjs",
+    "db:reconcile:plan": "node scripts/plan_product_reconciliation.mjs",
+    "db:audit": "node scripts/audit_product_db.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

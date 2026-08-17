@@ -106,7 +106,7 @@ export function isSupabaseConfigured() {
 }
 
 function useSeedFallback() {
-  return process.env.XP_FORCE_SEED_FALLBACK === "1" || !isSupabaseConfigured();
+  return process.env.XP_FORCE_SEED_FALLBACK === "1";
 }
 
 function isUsefulTask(task: SeedTask) {
@@ -180,14 +180,25 @@ export async function getSourceStats() {
     return [
       {
         label: "데이터 소스",
-        value: process.env.XP_FORCE_SEED_FALLBACK === "1" ? "Seed" : "Seed 대체",
-        detail: isSupabaseConfigured() ? "강제 데모 모드" : "Supabase 환경값 없음",
+        value: "Seed",
+        detail: "강제 데모 모드",
       },
       { label: "네트워크", value: String(seed.summary.people), detail: "파트너/담당자" },
       { label: "고객사", value: String(buildSeedCustomerRows().length), detail: "Deal list 회사 기준" },
       { label: "프로젝트", value: String(seed.summary.projects), detail: "딜/운영 프로젝트" },
       { label: "이벤트", value: "23", detail: "To Go 이벤트 액션" },
       { label: "문서 필요", value: String(seed.summary.documentRequirements), detail: "NDA/프로필/계약" },
+    ];
+  }
+
+  if (!isSupabaseConfigured()) {
+    return [
+      { label: "데이터 소스", value: "DB 미연결", detail: "Supabase 환경값 필요" },
+      { label: "네트워크", value: "-", detail: "실 DB 연결 후 표시" },
+      { label: "고객사", value: "-", detail: "실 DB 연결 후 표시" },
+      { label: "프로젝트", value: "-", detail: "실 DB 연결 후 표시" },
+      { label: "문서 필요", value: "-", detail: "실 DB 연결 후 표시" },
+      { label: "액션", value: "-", detail: "실 DB 연결 후 표시" },
     ];
   }
   const [people, companies, projects, events, documents, tasks] = await Promise.all([

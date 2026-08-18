@@ -9,7 +9,7 @@
 |---|---|
 | 아키텍처 | Next.js 16 (App Router, RSC + Server Actions) + Supabase (Auth/DB/Storage) |
 | DB 스키마 | 마이그레이션 8건 전부 라이브 적용 완료 (2026-08-18 확인) |
-| DB 데이터 | companies 463, people 427, projects 195, tasks 151, events 0, folders 4 |
+| DB 데이터 | companies 463, people 427, **projects 90 (파이프라인 기준)**, 휴지통 109, tasks 151, events 0, folders 7 |
 | 인증 | Supabase Auth 이메일/비밀번호. proxy.ts 세션 가드. 미로그인 → /login 리다이렉트 |
 | 권한 | admin 전체 편집 / PL·PM은 자기 프로젝트만 편집 (RLS로 DB 레벨 강제) |
 | 문서 저장 | Supabase Storage `xp-documents` 버킷 (private, signed URL 다운로드) |
@@ -32,7 +32,7 @@
   `SUPABASE_DB_URL`, `SUPABASE_ACCESS_TOKEN` 은 로컬 전용이므로 Vercel에 넣지 말 것.
 - PM/PL 계정 발급 (`npm run user:create`). 현재 계정은 관리자 1개(yks@xyzplus.co → 윤권상)뿐.
 - 계약 138건 미반영 (`npm run contracts:prepare` 부터). documents 0건, 파트너 NDA 대부분 미확인 상태.
-- 프로젝트 195건이 전부 Unsorted. 프로젝트 화면에서 체크박스로 선택 → 폴더 일괄 이동 가능.
+- 프로젝트는 2026-08-18 통합 파이프라인 기준으로 재구성됨 (90건). Unsorted 25건은 서비스섹터가 비어 있던 행.
 
 ### 마이그레이션 적용 방법 2가지
 

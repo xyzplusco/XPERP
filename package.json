@@ -21,7 +21,8 @@
     "contracts:import": "node scripts/import_contracts.mjs",
     "db:status": "node scripts/migration_status.mjs",
     "db:migrate:api": "node scripts/apply_migrations_api.mjs",
-    "db:status:api": "node scripts/migration_status_api.mjs"
+    "db:status:api": "node scripts/migration_status_api.mjs",
+    "pipeline:sync": "node scripts/sync_pipeline.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

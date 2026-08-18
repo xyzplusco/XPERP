@@ -754,3 +754,47 @@ dry-run 은 절대 DB를 건드리지 않는다는 점을 다음 에이전트도
 
 ### 주의
 - 토큰은 대화로 전달받아 사용했다. 사용자에게 폐기 안내함. 코드/커밋에 남기지 않았다.
+
+## [2026-08-18] XP 통합 파이프라인 반영 (라이브)
+
+입력: `data/XP_통합파이프라인_2026.xlsx` — Pipeline 90행 / 매출현황 6행 / 원본백업.
+
+### 사전 확인
+- 파이프라인 90개 회사가 **전부 기존 companies 에 존재**, PL/PM 15명도 **전부 people 에 존재**.
+  즉 신규 고객사·파트너 생성이 불필요했다. (사용자 요청대로 파트너 DB는 건드리지 않음)
+
+### 매핑 규칙 (scripts/sync_pipeline.mjs)
+- 서비스섹터 → 폴더: BPR/리엔지니어링→Re-Engineering, BB/비즈니스빌딩→Business Building,
+  GX/해외→Go Global, AX→AX, 투자·매각·F.I.M·IR→투자·M&A, 영업·영업컨설팅·사업컨설팅→영업·컨설팅.
+  신규 폴더 3개 생성(Business Building / 투자·M&A / 영업·컨설팅).
+- 상태 → projects.status: 계약→confirmed, 계약임박→likely, 제안·가망→discussing, 관리→managed, 보류→on_hold
+- **구간(고객/협상/관리기업/미정리후보/파트너협업건)은 contract_status 에 그대로 보관.** 딜 목록의 '계약' 열에 노출된다.
+- 주차 라벨 '8월2차' → 날짜 환산 (1차=1일, 2차=8일, 3차=15일, 4차=22일), 연도 2026.
+- 매출현황 합계 → expected_revenue.
+
+### 결과
+| 항목 | 값 |
+|---|---:|
+| 살아있는 프로젝트 | 90 (이전 195) |
+| 휴지통 | 109 (중복 45 + 파이프라인 외 64) |
+| 주차별 업데이트 | 349 (이전 123, 대부분 무관한 것) |
+| 고객사 목록 | 89 |
+| PL 연결 | 43 / 90 |
+| 예상매출 입력 | 6건 (합계 3.17억) |
+| 익명 M&A(A사/S사 등) 잔존 | 0 |
+
+### 주의사항 / 배운 점
+- **Management API 는 요청 수 제한이 있다.** 프로젝트당 5회씩 450회를 보냈다가 Cloudflare 502.
+  10건씩 묶어 `begin; ... commit;` 한 번으로 보내도록 수정(총 9회). 대량 작업 시 반드시 배치할 것.
+- **같은 회사가 파이프라인에 여러 번 나올 수 있다** (유앤어스: BPR 협상/김수민 + 투자·매각 관리/이봉진).
+  처음엔 회사당 1건으로 접어버려 한 건이 사라졌다. `keepProjectIds` 로 이미 배정된 프로젝트를 제외하도록 수정.
+- 반영 전 `backup_before_pipeline_20260818.json` 으로 projects/members/weekly/companies 전량 백업.
+  휴지통은 `deleted_at` 이므로 UI에서 복구 가능하고, 필드 덮어쓰기는 이 백업으로 되돌릴 수 있다.
+- 스크립트는 멱등하다. 같은 파일을 다시 돌리면 같은 결과로 수렴한다.
+
+### 재실행 방법
+```bash
+npm run pipeline:sync -- --file data/XP_통합파이프라인_2026.xlsx           # 미리보기
+npm run pipeline:sync -- --file data/XP_통합파이프라인_2026.xlsx --apply   # 반영
+```
+로컬은 SUPABASE_DB_URL 로 붙고, 포트가 막힌 환경에서는 `XP_DB_MODE=api SUPABASE_ACCESS_TOKEN=... ` 로 HTTPS 경유.

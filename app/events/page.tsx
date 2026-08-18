@@ -1,7 +1,6 @@
-import Link from "next/link";
+import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable";
 import { SaveNotice } from "@/components/SaveNotice";
 import { createEventAction } from "@/lib/actions";
-import { getSessionUser } from "@/lib/auth";
 import { getEvents } from "@/lib/queries";
 import { EVENT_STATUS_OPTIONS, formatDateTime, label } from "@/lib/labels";
 
@@ -10,63 +9,68 @@ export const dynamic = "force-dynamic";
 export default async function EventsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; trashed?: string; error?: string }>;
 }) {
-  const { saved, error } = await searchParams;
-  const [user, events] = await Promise.all([getSessionUser(), getEvents()]);
+  const { saved, trashed, error } = await searchParams;
+  const events = await getEvents();
+
+  const statusOptions: [string, string][] = EVENT_STATUS_OPTIONS.map((v) => [v, label(v)]);
+
+  const columns: ColumnDef[] = [
+    { key: "name", header: "이벤트", width: "28%", kind: "text" },
+    { key: "event_type", header: "유형", width: "13%", kind: "text" },
+    { key: "status", header: "상태", width: "10%", kind: "select", options: statusOptions },
+    { key: "starts_at", header: "일시", width: "13%", kind: "readonly" },
+    { key: "location", header: "장소", width: "13%", kind: "text" },
+    { key: "invitee_count", header: "초대", width: "7%", kind: "readonly", numeric: true },
+    { key: "confirmed_count", header: "참가확정", width: "8%", kind: "readonly", numeric: true },
+    { key: "next_action", header: "다음 액션", kind: "text" },
+  ];
+
+  const rows: BulkRow[] = events.map((event) => {
+    const id = String(event.id);
+    return {
+      id,
+      href: `/events/${id}`,
+      linkKey: "name",
+      display: {
+        name: String(event.name ?? ""),
+        event_type: String(event.event_type ?? ""),
+        status: label(String(event.status ?? "")),
+        starts_at: event.is_date_tbd ? "미정" : formatDateTime(event.starts_at as string | null),
+        location: String(event.location ?? ""),
+        invitee_count: String((event as unknown as { invitee_count: number }).invitee_count ?? 0),
+        confirmed_count: String((event as unknown as { confirmed_count: number }).confirmed_count ?? 0),
+        next_action: String(event.next_action ?? ""),
+      },
+      raw: {
+        name: String(event.name ?? ""),
+        event_type: String(event.event_type ?? ""),
+        status: String(event.status ?? ""),
+        location: String(event.location ?? ""),
+        next_action: String(event.next_action ?? ""),
+      },
+    };
+  });
 
   return (
     <>
       <div className="pageHeader">
         <h1>이벤트</h1>
-        <div className="pageHeaderMeta">{events.length}건</div>
+        <div className="pageHeaderMeta">{events.length}건 · 셀을 더블클릭하면 바로 수정</div>
       </div>
 
-      <SaveNotice saved={saved} error={error} />
+      <SaveNotice saved={saved ?? trashed} error={error} />
 
       <div className="panel">
-        <div className="tableWrap">
-          <table>
-            <thead>
-              <tr>
-                <th>이벤트</th>
-                <th>유형</th>
-                <th>상태</th>
-                <th>일시</th>
-                <th>장소</th>
-                <th className="numeric">초대</th>
-                <th className="numeric">참가확정</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="emptyCell">
-                    등록된 이벤트가 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                events.map((event) => (
-                  <tr key={String(event.id)}>
-                    <td>
-                      <Link className="tableLink" href={`/events/${event.id}`}>
-                        {event.name}
-                      </Link>
-                    </td>
-                    <td>{event.event_type ?? "–"}</td>
-                    <td>{label(event.status)}</td>
-                    <td className="mutedText">
-                      {event.is_date_tbd ? "미정" : formatDateTime(event.starts_at)}
-                    </td>
-                    <td>{event.location ?? "–"}</td>
-                    <td className="numeric">{event.invitee_count ?? 0}</td>
-                    <td className="numeric">{event.confirmed_count ?? 0}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <BulkTable
+          entity="events"
+          columns={columns}
+          rows={rows}
+          returnPath="/events"
+          bulkActions={[{ field: "status", label: "상태 변경", options: statusOptions }]}
+          emptyText="등록된 이벤트가 없습니다."
+        />
       </div>
 
       <div className="panel">
@@ -93,9 +97,7 @@ export default async function EventsPage({
               <label>상태</label>
               <select name="status" defaultValue="planning">
                 {EVENT_STATUS_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {label(option)}
-                  </option>
+                  <option key={option} value={option}>{label(option)}</option>
                 ))}
               </select>
             </div>
@@ -116,9 +118,7 @@ export default async function EventsPage({
               <textarea name="description" />
             </div>
             <div className="formActions full">
-              <button className="primaryButton" type="submit">
-                등록
-              </button>
+              <button className="primaryButton" type="submit">등록</button>
             </div>
           </form>
         </div>

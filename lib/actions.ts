@@ -4,6 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth";
+import {
+  EDITABLE,
+  ENTITY_PATH,
+  PROFILE_EDITABLE,
+  isValidEntity,
+  validateField,
+  type EntityKey,
+} from "@/lib/bulk";
 
 function text(formData: FormData, key: string): string | null {
   const value = formData.get(key);
@@ -654,4 +662,162 @@ export async function bulkInviteeFlagAction(eventId: string, formData: FormData)
   }
   revalidatePath(`/events/${eventId}`);
   redirect(`/events/${eventId}?saved=1`);
+}
+
+// ---------------------------------------------------------------- 대량 편집 / 휴지통
+
+async function assertAdminFor(entity: EntityKey, field: string) {
+  const spec = entity === "people" && field in PROFILE_EDITABLE
+    ? PROFILE_EDITABLE[field]
+    : EDITABLE[entity][field];
+  if (!spec?.adminOnly) return true;
+  const user = await getSessionUser();
+  return user?.role === "admin";
+}
+
+// 셀 하나를 바로 수정한다.
+export async function inlineUpdateAction(
+  entity: string,
+  id: string,
+  field: string,
+  rawValue: string,
+  returnPath: string
+) {
+  if (!isValidEntity(entity)) return { ok: false, message: "잘못된 대상입니다." };
+
+  const isProfileField = entity === "people" && field in PROFILE_EDITABLE;
+  const spec = isProfileField ? PROFILE_EDITABLE[field] : EDITABLE[entity][field];
+  const result = validateField(spec, rawValue);
+  if (!result.ok) return { ok: false, message: result.reason };
+
+  if (!(await assertAdminFor(entity, field))) {
+    return { ok: false, message: "관리자만 수정할 수 있습니다." };
+  }
+
+  const supabase = await createSupabaseServer();
+
+  if (isProfileField) {
+    const { error } = await supabase
+      .from("network_profiles")
+      .upsert({ person_id: id, network_segment: "unknown", [field]: result.value }, { onConflict: "person_id" });
+    if (error) return { ok: false, message: error.message };
+  } else {
+    const { error } = await supabase.from(entity).update({ [field]: result.value }).eq("id", id);
+    if (error) return { ok: false, message: error.message };
+  }
+
+  revalidatePath(returnPath);
+  return { ok: true, message: "저장됨" };
+}
+
+// 선택한 여러 행에 같은 값을 적용한다.
+export async function bulkUpdateAction(formData: FormData) {
+  const entity = text(formData, "entity") ?? "";
+  const field = text(formData, "field") ?? "";
+  const value = text(formData, "value");
+  const returnPath = text(formData, "return_path") ?? "/";
+  const ids = formData.getAll("id").filter((v): v is string => typeof v === "string");
+
+  if (!isValidEntity(entity) || ids.length === 0) redirect(`${returnPath}?error=empty`);
+
+  const isProfileField = entity === "people" && field in PROFILE_EDITABLE;
+  const spec = isProfileField ? PROFILE_EDITABLE[field] : EDITABLE[entity][field];
+  const result = validateField(spec, value);
+  if (!result.ok) redirect(`${returnPath}?error=save`);
+  if (!(await assertAdminFor(entity, field))) redirect(`${returnPath}?error=forbidden`);
+
+  const supabase = await createSupabaseServer();
+
+  if (isProfileField) {
+    const rows = ids.map((personId) => ({
+      person_id: personId,
+      network_segment: "unknown",
+      [field]: result.value,
+    }));
+    const { error } = await supabase.from("network_profiles").upsert(rows, { onConflict: "person_id" });
+    if (error) {
+      console.error("bulkUpdateAction profile", error.message);
+      redirect(`${returnPath}?error=save`);
+    }
+  } else {
+    const { error } = await supabase.from(entity).update({ [field]: result.value }).in("id", ids);
+    if (error) {
+      console.error("bulkUpdateAction", error.message);
+      redirect(`${returnPath}?error=save`);
+    }
+  }
+
+  revalidatePath(returnPath);
+  redirect(`${returnPath}?saved=${ids.length}`);
+}
+
+// 휴지통으로 보낸다 (실제로 지우지 않는다).
+export async function bulkTrashAction(formData: FormData) {
+  const entity = text(formData, "entity") ?? "";
+  const returnPath = text(formData, "return_path") ?? "/";
+  const ids = formData.getAll("id").filter((v): v is string => typeof v === "string");
+  if (!isValidEntity(entity) || ids.length === 0) redirect(`${returnPath}?error=empty`);
+
+  const supabase = await createSupabaseServer();
+  const user = await getSessionUser();
+
+  const { error } = await supabase
+    .from(entity)
+    .update({ deleted_at: new Date().toISOString(), deleted_by_user_id: user?.appUserId ?? null })
+    .in("id", ids);
+  if (error) {
+    console.error("bulkTrashAction", error.message);
+    redirect(`${returnPath}?error=save`);
+  }
+
+  revalidatePath(returnPath);
+  revalidatePath("/trash");
+  redirect(`${returnPath}?trashed=${ids.length}`);
+}
+
+export async function restoreAction(entity: string, id: string) {
+  if (!isValidEntity(entity)) redirect("/trash?error=save");
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase
+    .from(entity)
+    .update({ deleted_at: null, deleted_by_user_id: null })
+    .eq("id", id);
+  if (error) {
+    console.error("restoreAction", error.message);
+    redirect("/trash?error=save");
+  }
+  revalidatePath("/trash");
+  const path = ENTITY_PATH[entity as EntityKey];
+  if (path) revalidatePath(path);
+  redirect("/trash?saved=1");
+}
+
+export async function purgeAction(entity: string, id: string) {
+  const user = await getSessionUser();
+  if (user?.role !== "admin") redirect("/trash?error=forbidden");
+  if (!isValidEntity(entity)) redirect("/trash?error=save");
+
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase.from(entity).delete().eq("id", id);
+  if (error) {
+    console.error("purgeAction", error.message);
+    redirect("/trash?error=purge");
+  }
+  revalidatePath("/trash");
+  redirect("/trash?saved=1");
+}
+
+export async function emptyTrashAction(entity: string) {
+  const user = await getSessionUser();
+  if (user?.role !== "admin") redirect("/trash?error=forbidden");
+  if (!isValidEntity(entity)) redirect("/trash?error=save");
+
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase.from(entity).delete().not("deleted_at", "is", null);
+  if (error) {
+    console.error("emptyTrashAction", error.message);
+    redirect("/trash?error=purge");
+  }
+  revalidatePath("/trash");
+  redirect("/trash?saved=1");
 }

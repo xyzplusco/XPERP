@@ -6,5 +6,6 @@ export const navigationItems = [
   { href: "/tickets", label: "티켓" },
   { href: "/events", label: "이벤트" },
   { href: "/documents", label: "문서" },
+  { href: "/trash", label: "휴지통" },
   { href: "/settings", label: "설정" },
 ];

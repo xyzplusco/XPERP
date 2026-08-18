@@ -715,3 +715,42 @@ dry-run 은 절대 DB를 건드리지 않는다는 점을 다음 에이전트도
 - 마이그레이션 7개 전부 무오류 적용, 재실행 안전
 - source_task 이벤트 삭제 확인: 임시 이벤트 제거·실제 이벤트 보존·고아 초대자 0·태스크는 event_id 만 해제되고 보존
 - `npm run build` 통과
+
+## [2026-08-18] 라이브 동기화 + 대량 편집 / 휴지통
+
+### 라이브 DB 동기화
+- 사용자가 제공한 Supabase Personal Access Token 으로 Management API 경유 적용 경로를 추가
+  (`scripts/apply_migrations_api.mjs`, `scripts/migration_status_api.mjs`).
+  이 컨테이너에서 Postgres 포트(5432/6543)는 막혀 있으나 api.supabase.com(443)은 열려 있다.
+- 확인 결과 020000·030000 은 사용자가 이미 적용한 상태였고, 신규 20260818000000 만 적용됨.
+- 라이브 상태: companies 463 / people 427 / projects 195 / tasks 151 / events 0 / folders 4 / users 1
+- 관리자 계정 `yks@xyzplus.co` 의 person_id 가 비어 있어 윤권상(people)과 연결함.
+  이걸 연결해야 사이드바에 이름이 뜨고 담당자 후보 목록에 포함된다.
+
+### 배포 견고성
+- 환경변수가 없으면 모든 페이지가 500 이 되던 문제 → `app/layout.tsx` 에서 사전 확인 후
+  원인과 해결법을 보여주는 화면을 렌더한다. 빌드는 환경변수 없이도 통과함을 재확인.
+
+### 휴지통 (소프트 삭제)
+- `20260818000000_soft_delete_trash.sql`: companies·people·projects·events·tasks 에
+  `deleted_at`, `deleted_by_user_id` 추가 + 부분 인덱스. `erp_customer_rows` 뷰도 삭제행 제외하도록 재생성.
+- 모든 목록 쿼리에 `.is("deleted_at", null)` 적용.
+- `/trash`: 유형별로 모아 보기, 복구, 영구삭제(관리자), 유형별 비우기(관리자).
+- 삭제는 되돌릴 수 있어야 하므로 하드 삭제는 휴지통에서만 가능하게 했다.
+
+### 대량 편집 / 인라인 수정
+- `lib/bulk.ts` — **수정 가능한 테이블·필드·허용값 화이트리스트.** 서버 액션은 이걸 통과한 값만 DB에 쓴다.
+  임의 테이블/컬럼 주입을 막기 위한 것이므로 새 필드를 열 때 반드시 여기에 등록할 것.
+- `components/BulkTable.tsx` — 재사용 표. 체크박스 선택 → 상단 바에서 일괄 적용/휴지통,
+  셀 더블클릭 → 인라인 수정(Enter 저장, Esc 취소, 저장됨 표시).
+- 적용 화면: 프로젝트(폴더·유형·상태 일괄), 고객사, 파트너(구분·분류·NDA 일괄), 이벤트(상태 일괄).
+- people 의 구분/NDA 등은 network_profiles 에 있으므로 upsert 로 분기 처리.
+
+### 검증 (라이브 DB 대상)
+- 임시 QA 관리자 계정을 만들어 실제 세션 쿠키로 9개 페이지 전부 200 렌더 확인 (쿼리 오류 0건).
+- 쓰기 경로 검증: 프로젝트 status 인라인 변경 → 휴지통 이동 → 휴지통 조회 → 복구까지 RLS 통과 확인,
+  데이터는 원상복구. 이후 QA 계정 삭제.
+- `npm run build` 통과.
+
+### 주의
+- 토큰은 대화로 전달받아 사용했다. 사용자에게 폐기 안내함. 코드/커밋에 남기지 않았다.

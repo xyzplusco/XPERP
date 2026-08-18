@@ -1,6 +1,6 @@
 # XP ERP — Agent Handoff
 
-> 최종 갱신: 2026-08-17 (Claude Fable — 앱 레이어 전면 재구축)
+> 최종 갱신: 2026-08-18 (대량편집·휴지통 / 라이브 DB 동기화 완료)
 > 상세 이력: [`AGENT_LOG.md`](./AGENT_LOG.md)
 
 ## 0. 현재 상태 요약
@@ -8,32 +8,40 @@
 | 항목 | 상태 |
 |---|---|
 | 아키텍처 | Next.js 16 (App Router, RSC + Server Actions) + Supabase (Auth/DB/Storage) |
-| DB 스키마 | Codex 작성 초기 스키마 유지 + 신규 마이그레이션 1건 (auth/RLS/storage) |
-| DB 데이터 | 라이브 Supabase: companies 463, people 435, projects 195, tasks 151, doc_requirements 245 |
+| DB 스키마 | 마이그레이션 8건 전부 라이브 적용 완료 (2026-08-18 확인) |
+| DB 데이터 | companies 463, people 427, projects 195, tasks 151, events 0, folders 4 |
 | 인증 | Supabase Auth 이메일/비밀번호. proxy.ts 세션 가드. 미로그인 → /login 리다이렉트 |
 | 권한 | admin 전체 편집 / PL·PM은 자기 프로젝트만 편집 (RLS로 DB 레벨 강제) |
 | 문서 저장 | Supabase Storage `xp-documents` 버킷 (private, signed URL 다운로드) |
 | 빌드 | `npm run build` 통과 확인 (2026-08-17) |
-| 배포 | 미배포. Vercel 배포 절차는 아래 §4 |
+| 배포 | GitHub 푸시 완료. Vercel 환경변수 확인 필요 (§1) |
 
-## 1. 아직 적용 안 된 것 (최우선)
+## 1. 현재 상태 / 남은 것
 
-이 작업 세션은 클라우드 샌드박스에서 진행되어 **Postgres 포트(5432/6543)가 막혀 있었음**.
-따라서 신규 마이그레이션이 **아직 라이브 DB에 적용되지 않았다**. 로컬(James의 Mac)에서 실행 필요:
+라이브 Supabase에는 마이그레이션 8건이 **모두 적용되어 있다** (2026-08-18 Management API로 확인).
+`npm run db:status` 또는 `npm run db:status:api` 로 언제든 확인할 수 있다.
+
+남은 것:
+- **Vercel 환경변수 확인.** 빌드는 환경변수 없이도 통과하는 것을 확인했고 lockfile도 정상이다.
+  배포 후 화면이 안 뜨면 Vercel → Settings → Environment Variables 에 아래 2개가 있는지 확인할 것.
+  없으면 이제 500 대신 안내 화면이 뜬다.
+  ```
+  NEXT_PUBLIC_SUPABASE_URL
+  NEXT_PUBLIC_SUPABASE_ANON_KEY
+  ```
+  `SUPABASE_DB_URL`, `SUPABASE_ACCESS_TOKEN` 은 로컬 전용이므로 Vercel에 넣지 말 것.
+- PM/PL 계정 발급 (`npm run user:create`). 현재 계정은 관리자 1개(yks@xyzplus.co → 윤권상)뿐.
+- 계약 138건 미반영 (`npm run contracts:prepare` 부터). documents 0건, 파트너 NDA 대부분 미확인 상태.
+- 프로젝트 195건이 전부 Unsorted. 프로젝트 화면에서 체크박스로 선택 → 폴더 일괄 이동 가능.
+
+### 마이그레이션 적용 방법 2가지
 
 ```bash
-npm install                # @supabase/ssr 추가됨
-npm run db:migrate         # 20260817010000_auth_roles_rls_storage.sql 적용
-npm run user:create -- --email yoonks9306@gmail.com --password '<새 비밀번호>' --role admin
-npm run dev                # localhost:3000 에서 로그인 확인
+npm run db:migrate       # Postgres 직접 연결 (로컬에서)
+npm run db:migrate:api   # Management API 경유 (SUPABASE_ACCESS_TOKEN 필요, 방화벽 환경에서 사용)
 ```
 
-마이그레이션 적용 전에는 앱이 로그인은 요구하지만 RLS가 없어서 anon key로 DB가 열려 있는 상태다.
-**적용 전에는 절대 배포하지 말 것.**
-
-추가 정리 항목:
-- 스모크 테스트 중 생성된 미확인 auth 계정 `erp-smoke-test@xyzplus.co` 1건 존재. Supabase 대시보드 → Authentication에서 삭제 권장.
-- Supabase 대시보드 → Authentication → Sign In / Up에서 **공개 회원가입(Enable email signups) 비활성화** 권장. (RLS상 등록된 users 행이 없으면 아무것도 못 보지만, 가입 자체를 막는 게 깔끔함)
+둘 다 같은 `schema_migrations` 테이블을 쓰므로 섞어 써도 안전하다.
 
 ## 2. 권한 모델
 

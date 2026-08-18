@@ -8,3 +8,6 @@ dist/
 .env.*.local
 *.log
 /*.xlsx
+
+# 구버전 파일 보관함 (확인 후 삭제)
+_to_delete/

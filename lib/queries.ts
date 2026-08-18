@@ -45,7 +45,11 @@ function isRealDeal(row: DealRow) {
 
 export async function getDeals(filters?: { status?: string; type?: string; folderId?: string; unsorted?: boolean }) {
   const supabase = await createSupabaseServer();
-  let query = supabase.from("projects").select(DEAL_SELECT).order("updated_at", { ascending: false });
+  let query = supabase
+    .from("projects")
+    .select(DEAL_SELECT)
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false });
   if (filters?.status) query = query.eq("status", filters.status);
   if (filters?.type) query = query.eq("project_type", filters.type);
   if (filters?.folderId) query = query.eq("folder_id", filters.folderId);
@@ -63,6 +67,9 @@ export async function getDashboardStats() {
 
   const count = async (table: string, apply?: (q: ReturnType<typeof supabase.from>["select"] extends never ? never : any) => any) => {
     let query = supabase.from(table).select("id", { count: "exact", head: true });
+    if (["projects", "tasks", "people", "companies", "events"].includes(table)) {
+      query = query.is("deleted_at", null);
+    }
     if (apply) query = apply(query);
     const { count: value } = await query;
     return value ?? 0;
@@ -189,6 +196,7 @@ export async function getPartners() {
         "company:companies!people_primary_company_id_fkey(id, name_ko), " +
         "profile:network_profiles(network_segment, partner_status, xp_role, nda_status, profile_status, appointment_status, core_field, expertise_detail, memo)"
     )
+    .is("deleted_at", null)
     .order("name_ko", { ascending: true })
     .limit(1000);
   if (error) {
@@ -455,6 +463,7 @@ export async function getEvents() {
       "id, name, event_type, status, starts_at, ends_at, location, description, next_action, is_date_tbd, " +
         "invitees:event_invitees!event_invitees_event_id_fkey(id, attendance_confirmed)"
     )
+    .is("deleted_at", null)
     .order("starts_at", { ascending: false, nullsFirst: false })
     .limit(200);
   if (error) {
@@ -648,7 +657,11 @@ export async function getTickets(filters?: {
   assigneePersonId?: string;
 }) {
   const supabase = await createSupabaseServer();
-  let query = supabase.from("tasks").select(TICKET_SELECT).order("created_at", { ascending: false });
+  let query = supabase
+    .from("tasks")
+    .select(TICKET_SELECT)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
 
   if (filters?.scope === "unsorted") query = query.is("project_id", null);
   if (filters?.scope === "open") query = query.in("status", ["backlog", "in_progress", "waiting", "blocked"]);
@@ -669,9 +682,9 @@ export async function getTicketCounts() {
   const supabase = await createSupabaseServer();
   const open = ["backlog", "in_progress", "waiting", "blocked"];
   const [unsorted, openCount, total] = await Promise.all([
-    supabase.from("tasks").select("id", { count: "exact", head: true }).is("project_id", null).in("status", open),
-    supabase.from("tasks").select("id", { count: "exact", head: true }).in("status", open),
-    supabase.from("tasks").select("id", { count: "exact", head: true }),
+    supabase.from("tasks").select("id", { count: "exact", head: true }).is("deleted_at", null).is("project_id", null).in("status", open),
+    supabase.from("tasks").select("id", { count: "exact", head: true }).is("deleted_at", null).in("status", open),
+    supabase.from("tasks").select("id", { count: "exact", head: true }).is("deleted_at", null),
   ]);
   return {
     unsorted: unsorted.count ?? 0,
@@ -720,6 +733,7 @@ export async function getProjectOptions() {
   const { data } = await supabase
     .from("projects")
     .select("id, name, folder:project_folders!projects_folder_id_fkey(id, name), company:companies!projects_company_id_fkey(name_ko)")
+    .is("deleted_at", null)
     .order("updated_at", { ascending: false })
     .limit(500);
   return ((data ?? []) as unknown as Record<string, unknown>[])
@@ -739,7 +753,7 @@ export async function getProjectOptions() {
 
 export async function getFolderCounts() {
   const supabase = await createSupabaseServer();
-  const { data } = await supabase.from("projects").select("folder_id, name").limit(1000);
+  const { data } = await supabase.from("projects").select("folder_id, name").is("deleted_at", null).limit(1000);
   const rows = ((data ?? []) as { folder_id: string | null; name: string }[]).filter(
     (row) => row.name !== "회사명"
   );
@@ -750,4 +764,50 @@ export async function getFolderCounts() {
     else counts.set(row.folder_id, (counts.get(row.folder_id) ?? 0) + 1);
   }
   return { counts, unsorted, total: rows.length };
+}
+
+
+// ---------------------------------------------------------------- 휴지통
+
+export type TrashRow = {
+  id: string;
+  name: string;
+  deleted_at: string;
+  detail: string;
+};
+
+const TRASH_SOURCES: { entity: string; label: string; nameField: string; extra: string }[] = [
+  { entity: "projects", label: "프로젝트", nameField: "name", extra: "status" },
+  { entity: "events", label: "이벤트", nameField: "name", extra: "event_type" },
+  { entity: "companies", label: "고객사", nameField: "name_ko", extra: "industry" },
+  { entity: "people", label: "파트너", nameField: "name_ko", extra: "title" },
+  { entity: "tasks", label: "티켓", nameField: "title", extra: "status" },
+];
+
+export async function getTrash() {
+  const supabase = await createSupabaseServer();
+
+  const groups = await Promise.all(
+    TRASH_SOURCES.map(async (source) => {
+      const { data, error } = await supabase
+        .from(source.entity)
+        .select(`id, ${source.nameField}, ${source.extra}, deleted_at`)
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false })
+        .limit(500);
+      if (error) {
+        console.error("getTrash", source.entity, error.message);
+        return { ...source, rows: [] as TrashRow[] };
+      }
+      const rows = ((data ?? []) as unknown as Record<string, string>[]).map((row) => ({
+        id: row.id,
+        name: row[source.nameField] ?? "",
+        deleted_at: row.deleted_at,
+        detail: row[source.extra] ?? "",
+      }));
+      return { ...source, rows };
+    })
+  );
+
+  return groups;
 }

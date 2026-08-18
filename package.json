@@ -19,7 +19,9 @@
     "db:import": "node scripts/import_workbook.mjs",
     "contracts:prepare": "node scripts/prepare_contracts.mjs",
     "contracts:import": "node scripts/import_contracts.mjs",
-    "db:status": "node scripts/migration_status.mjs"
+    "db:status": "node scripts/migration_status.mjs",
+    "db:migrate:api": "node scripts/apply_migrations_api.mjs",
+    "db:status:api": "node scripts/migration_status_api.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

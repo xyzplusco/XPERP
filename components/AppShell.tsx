@@ -1,40 +1,48 @@
 import Link from "next/link";
 import { navigationItems } from "@/lib/navigation";
+import { signOutAction } from "@/lib/actions";
+import { label } from "@/lib/labels";
+import type { SessionUser } from "@/lib/auth";
+import { NavLinks } from "@/components/NavLinks";
+import { TicketDialog } from "@/components/TicketDialog";
+import { getAssignablePeople, getProjectOptions } from "@/lib/queries";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export async function AppShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
+  const [assignables, projects] = user.appUserId
+    ? await Promise.all([getAssignablePeople(), getProjectOptions()])
+    : [[], []];
+
   return (
     <div className="appShell">
-      <aside className="sidebar" aria-label="주요 메뉴">
-        <Link href="/" className="brandLink" aria-label="대시보드로 이동">
-          <div className="brand">
-            <img src="/logo.png" alt="XP" className="brandLogo" />
-          </div>
-          <div className="brandName">XP Dashboard</div>
+      <aside className="sidebar">
+        <Link href="/" className="brandLink">
+          <img src="/logo.png" alt="XP" className="brandLogo" />
         </Link>
         <nav className="navList">
-          {navigationItems.map((item) => (
-            <Link key={item.href} href={item.href} className="navItem">
-              {item.label}
-            </Link>
-          ))}
+          <NavLinks items={navigationItems} />
         </nav>
+        <div className="sidebarActions">
+          <TicketDialog assignables={assignables} projects={projects} />
+        </div>
         <div className="sidebarFooter">
-          <span>데이터 소스</span>
-          <strong>Supabase</strong>
+          <div className="userEmail">{user.personName ?? user.email}</div>
+          <div>{label(user.role)}</div>
+          <form action={signOutAction}>
+            <button className="logoutButton" type="submit">
+              로그아웃
+            </button>
+          </form>
         </div>
       </aside>
       <div className="mainColumn">
-        <header className="topbar">
-          <div>
-            <div className="topbarLabel">XP Dashboard</div>
-            <h1>운영 관리 대시보드</h1>
-          </div>
-          <div className="topbarActions">
-            <button className="secondaryButton" type="button">가져오기 검토</button>
-            <button className="primaryButton" type="button">새 액션</button>
-          </div>
-        </header>
-        <main className="content">{children}</main>
+        <main className="content">
+          {user.appUserId === null ? (
+            <p className="notice noticeError">
+              이 계정은 아직 ERP에 등록되지 않았습니다. 관리자에게 계정 등록을 요청하세요.
+            </p>
+          ) : null}
+          {children}
+        </main>
       </div>
     </div>
   );

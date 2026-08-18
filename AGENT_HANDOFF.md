@@ -1,327 +1,105 @@
 # XP ERP — Agent Handoff
 
-> Product source of truth: [`README.md`](./README.md)
+> 최종 갱신: 2026-08-17 (Claude Fable — 앱 레이어 전면 재구축)
+> 상세 이력: [`AGENT_LOG.md`](./AGENT_LOG.md)
 
-## 0. Fast Context
+## 0. 현재 상태 요약
 
-| Item | Current State |
+| 항목 | 상태 |
 |---|---|
-| Product | XP internal ERP for network, projects, events, documents, tasks, and search |
-| Current phase | Actual product DB reconciliation + handoff |
-| Previous issue | Old plan treated Documents & Tasks as Phase 10 / optional. That is wrong. |
-| UI direction | Dense B2C SaaS/ERP, one primary green, restrained accent, no traffic-light AI badge styling |
-| Primary color | `#1a3c2c` |
-| Accent | `#c8a45d`, use sparingly |
-| Logo | `assets/logo.png` |
-| Source files | 4 Excel files, not 2 |
-| Backend recommendation | Supabase unless user says otherwise |
-| Full agent log | [`AGENT_LOG.md`](./AGENT_LOG.md) |
+| 아키텍처 | Next.js 16 (App Router, RSC + Server Actions) + Supabase (Auth/DB/Storage) |
+| DB 스키마 | Codex 작성 초기 스키마 유지 + 신규 마이그레이션 1건 (auth/RLS/storage) |
+| DB 데이터 | 라이브 Supabase: companies 463, people 435, projects 195, tasks 151, doc_requirements 245 |
+| 인증 | Supabase Auth 이메일/비밀번호. proxy.ts 세션 가드. 미로그인 → /login 리다이렉트 |
+| 권한 | admin 전체 편집 / PL·PM은 자기 프로젝트만 편집 (RLS로 DB 레벨 강제) |
+| 문서 저장 | Supabase Storage `xp-documents` 버킷 (private, signed URL 다운로드) |
+| 빌드 | `npm run build` 통과 확인 (2026-08-17) |
+| 배포 | 미배포. Vercel 배포 절차는 아래 §4 |
 
-## 0.1 Latest Reality Check
+## 1. 아직 적용 안 된 것 (최우선)
 
-The project is not production-ready. It is a real Next.js/Supabase scaffold with imported source data and one approved reconciliation pass applied.
+이 작업 세션은 클라우드 샌드박스에서 진행되어 **Postgres 포트(5432/6543)가 막혀 있었음**.
+따라서 신규 마이그레이션이 **아직 라이브 DB에 적용되지 않았다**. 로컬(James의 Mac)에서 실행 필요:
 
-Current live DB after reconciliation:
-
-| Item | Count / State |
-|---|---:|
-| companies | 463 |
-| people | 435 |
-| projects | 195 |
-| tasks | 151 |
-| document_requirements | 245 |
-| documents | 0 |
-| event_invitees | 0 |
-| enriched companies | 105 |
-| linked tasks | 98 / 151 |
-| linked project PL | 63 / 195 |
-| linked project PM | 34 / 195 |
-
-Critical remaining gaps:
-
-- Auth/login is currently disabled for direct demo access.
-- Actual uploaded document storage is not implemented.
-- Event invitees are not imported.
-- Anonymous `A사/B사/...` M&A rows remain and need a confidential deal/codename policy.
-- Import/reconciliation is still heuristic and needs a review queue.
-- Do not use seed fallback as product behavior; it only works when `XP_FORCE_SEED_FALLBACK=1`.
-
-## 1. Critical Product Correction
-
-The ERP must not become a pretty CRM. It must solve daily operating control:
-
-- Who is this person/company?
-- Which segment do they belong to?
-- Which project/event/document/task are they tied to?
-- What document is missing or expiring?
-- Who owns the next action?
-- What came from which source file?
-
-Documents and tasks are v1 core. Do not postpone them.
-
-## 2. Revised Phase Roadmap
-
-```text
-Phase 1R Spec Correction & Source Audit          ✅ 완료
-Phase 2  Database Schema & Import Contracts      ✅ 완료
-Phase 3  Seed Extraction & Reconciliation        🔄 진행 중
-Phase 4  App Scaffold & Design System            ✅ 완료
-Phase 5  Auth, Permissions, Document Storage     🔄 진행 중
-Phase 6  Network Module                          ⬜ 대기
-Phase 7  Project Module                          ⬜ 대기
-Phase 8  Event Module                            ⬜ 대기
-Phase 9  Documents, Tasks, Search, Dashboard     ⬜ 대기
-Phase 10 QA & Deploy                             ⬜ 대기
+```bash
+npm install                # @supabase/ssr 추가됨
+npm run db:migrate         # 20260817010000_auth_roles_rls_storage.sql 적용
+npm run user:create -- --email yoonks9306@gmail.com --password '<새 비밀번호>' --role admin
+npm run dev                # localhost:3000 에서 로그인 확인
 ```
 
-## 3. Source Data
+마이그레이션 적용 전에는 앱이 로그인은 요구하지만 RLS가 없어서 anon key로 DB가 열려 있는 상태다.
+**적용 전에는 절대 배포하지 말 것.**
 
-### Files in repo
+추가 정리 항목:
+- 스모크 테스트 중 생성된 미확인 auth 계정 `erp-smoke-test@xyzplus.co` 1건 존재. Supabase 대시보드 → Authentication에서 삭제 권장.
+- Supabase 대시보드 → Authentication → Sign In / Up에서 **공개 회원가입(Enable email signups) 비활성화** 권장. (RLS상 등록된 users 행이 없으면 아무것도 못 보지만, 가입 자체를 막는 게 깔끔함)
 
-```text
-data/
-├── XP_partner_list_cleaned_DB_ready.xlsx
-├── XP Deal list_대외비_20260805.xlsx
-└── raw/
-    ├── 00.XP_파트너 및 네트워크 리스트_260813.xlsx
-    └── To Go List XYZ Plus (7).xlsx
+## 2. 권한 모델
+
+- `users` 테이블이 Supabase Auth와 ERP를 연결: `auth_user_id` (auth.users FK), `global_role`, `person_id`.
+- 읽기: **users 행이 있는 활성 계정만** 전체 열람 가능 (`xp_is_member()`).
+- 쓰기: admin은 전부. PL/PM은 `xp_can_edit_project()` 판정 — projects의 primary/secondary PL, candidate PM이거나 project_members에 pl/pm/owner/coordinator로 등록된 사람.
+- PL/PM이 편집 가능한 것: 프로젝트 필드, 진행 업데이트 추가, 액션(tasks) 추가/수정, 프로젝트 연결 문서 요구사항.
+- 계정 생성: `npm run user:create -- --email .. --password .. --role member --person "이름"` (auth.users에 직접 insert, 이메일 확인 불필요). `--person`으로 people 행과 연결해야 PL/PM 권한이 산다.
+
+## 3. 앱 구조
+
+```
+proxy.ts                     # 세션 가드 (Next 16 middleware)
+lib/supabase/server.ts       # @supabase/ssr 서버 클라이언트 (쿠키 세션 → RLS 적용됨)
+lib/auth.ts                  # getSessionUser / canEditProject
+lib/queries.ts               # 전 페이지 데이터 조회 (PostgREST embed 사용, 라이브 DB 검증 완료)
+lib/actions.ts               # 모든 server actions (로그인, 프로젝트/고객사/파트너 수정, 업로드, 계정관리)
+lib/labels.ts                # 상태값 한국어 라벨, 파트너 구분 로직
+app/page.tsx                 # 대시보드 (통계 + Deal List)
+app/customers[/[id]]         # 고객사 목록/상세 (기업정보, 프로젝트, 담당자, 문서, 편집)
+app/partners[/[id]]          # 파트너 목록/상세 (구분 필터, 참여 프로젝트, NDA/프로필/위촉, 문서, 편집)
+app/projects[/[id]]          # 프로젝트 목록/상세 (개요, 업데이트 타임라인, 액션, 구성원, 문서, 편집)
+app/events[/[id]]            # 이벤트 목록/상세
+app/documents                # 문서 레지스트리 (보관 + 미비)
+app/settings                 # 계정 관리 (admin)
+components/                  # AppShell, NavLinks, DealTable, DocumentsPanel, SaveNotice
 ```
 
-### Source observations
+삭제된 것 (구 버전): `app/network`, `app/search`, `components/CustomerTable|DataTable|SectionHeader`, `lib/operational-data.ts` → `_to_delete/`로 이동됨. 확인 후 폴더째 삭제하면 됨.
 
-| Source | Important Findings |
-|---|---|
-| Cleaned partner list | 399 people, 341 blank category, only 3 NDA=Y in cleaned fields |
-| Original network list | XP, consulting partners, LP, external experts, vendors; includes NDA/profile/appointment/account status |
-| Deal list | Deals_0731 has 94 company rows, 90 unique companies, 24 weekly update columns, PL/PM fields |
-| To Go List | 157 operational rows; includes travel, IR, contracts, proposals, NDA/profile follow-ups, partner meetings |
+디자인 규칙 (변경 금지):
+- 흰 표면 + 헤어라인 보더 compartment, 페이지 제목 아래 2px 검정 룰
+- 주 색상 `#1a3c2c` (링크/활성 네비/버튼만), 액센트 `#c8a45d` 최소 사용
+- 아이콘 없음, 상태 뱃지/알록달록 필 없음, 마케팅성 문구·불필요한 설명 문구 없음
 
-## 4. Fixed Decisions
+## 4. Vercel 배포
 
-| ID | Decision |
-|---|---|
-| D1 | v1 includes Network, Projects, Events, Documents, Tasks, Search, Dashboard. |
-| D2 | Documents and document requirements are core schema. |
-| D3 | Tasks/next actions are core schema. |
-| D4 | Keep partner tags simple, but add `network_segment` and onboarding/document fields. |
-| D5 | Preserve import lineage with `import_sources` and `import_records`. |
-| D6 | No Communication Log module in v1. Use tasks, updates, and activity logs instead. |
-| D7 | Email/SMS real sending is v2. Tracking flags are v1. |
-| D8 | No traffic-light badge UI. Use text, checkboxes, table columns, restrained indicators. |
+1. GitHub `xyzplusco/XPERP`에 push (`.env.local`, 루트 xlsx는 gitignore 확인).
+2. Vercel에서 리포 임포트, 환경변수 2개: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+   (`SUPABASE_DB_URL`은 로컬 마이그레이션 전용 — Vercel에 넣지 말 것)
+3. 배포 전 §1 마이그레이션 + admin 계정 생성 필수.
+4. 도메인은 나중에 Vercel 대시보드에서 연결.
 
-## 5. Open Decisions
+## 4.5 데이터 정리 (엑셀 왕복)
 
-| ID | Decision Needed | Default Recommendation |
-|---|---|---|
-| O1 | Backend/storage | Supabase |
-| O2 | Document sensitivity levels | internal / confidential / restricted |
-| O3 | Google Drive links | allow URL metadata beside uploaded files |
-| O4 | To Go List parsing | semi-automatic extraction with review queue |
+```bash
+npm run db:export                                    # XP_ERP_편집용_YYYYMMDD.xlsx 생성
+npm run db:import -- --file <파일>                   # 미리보기 (DB 변경 없음)
+npm run db:import -- --file <파일> --apply           # 실제 반영
+```
 
-## 6. Phase 2 Requirements
+시트/열 정의는 `scripts/lib/workbook_schema.mjs` 한 곳에서 관리한다. 열을 추가하려면 여기만 고치면 export/import가 함께 따라간다.
+ID 열이 매칭 키이며 비어 있으면 신규 등록. 삭제는 '삭제'=Y 열로만 처리한다.
+변경 전후는 `activity_logs` 에 기록되므로 추적/복구가 가능하다.
 
-Create database schema/migration for:
+## 5. 다음 작업 우선순위 (미완)
 
-- users
-- people
-- companies
-- person_company_links
-- network_profiles
-- tags
-- entity_tags
-- projects
-- project_members
-- project_weekly_updates
-- events
-- event_invitees
-- documents
-- document_requirements
-- entity_documents
-- tasks
-- import_sources
-- import_records
-- activity_logs
+1. **데이터 정리 UI**: `A사/B사` 익명 M&A 딜 코드네임 정책, partner_status 오염값(이름/전화번호가 들어간 행) 일괄 정리 화면.
+2. **PL/PM 매칭 개선**: PL 63/195, PM 34/195만 연결됨. 프로젝트 상세에서 admin이 수동 지정 가능하니 운영하면서 채우거나, XP 내부 인력 명부 기준 재매칭 스크립트.
+3. **이벤트 초대자 임포트**: event_invitees 0건. 원본 시트에서 파싱 필요.
+4. **project_weekly_updates 이력 임포트**: Deal list의 주차별 업데이트 24개 컬럼 → 타임라인으로 변환하는 스크립트 (현재는 신규 기록만 쌓임).
+5. 검색은 의도적으로 제외 (v2). tsvector 인덱스는 스키마에 이미 있음.
 
-Acceptance criteria:
+## 6. 하지 말 것
 
-- Documents and tasks are present in initial schema.
-- Document type remains free-form text.
-- Document requirements exist even without uploaded file.
-- Tasks can link to person/company/project/event/document requirement.
-- Import records can preserve source workbook/sheet/row/raw text.
-- No `communications` table.
-
-## 7. Phase 3 Requirements
-
-Build import/audit scripts for all 4 workbooks.
-
-Acceptance criteria:
-
-- Cleaned partner list import/audit.
-- Original network list import/audit.
-- Deal list import/audit.
-- To Go List task/event extraction audit.
-- Duplicate people/company report.
-- PL/PM unmatched report.
-- Missing NDA/profile/appointment requirement report.
-- Idempotent seed strategy.
-
-## 8. Design Guardrails
-
-Use a hard, consistent ERP interface:
-
-- white and soft-gray work surfaces
-- `#1a3c2c` for primary action and selected nav
-- `#c8a45d` for sparse accent only
-- dense tables
-- compact filters
-- no hero landing page
-- no gradient/blob backgrounds
-- no colorful status pills
-- no AI dashboard aesthetic
-
-## 9. Handoff Log
-
-### [2026-08-17] Phase 5 — Supabase Auth Gate Added
-
-**Status**: Supabase DB is connected and seeded; app-level login gate is now added.
-
-**Completed**
-- XP logo and `XP Dashboard` brand area link back to `/`.
-- Added `/login` with Supabase email/password sign-in.
-- Added `proxy.ts` session guard. All ERP routes redirect to `/login` unless a Supabase Auth session exists.
-- Added topbar login/logout control.
-- Added `@supabase/ssr` for browser and server session cookie handling.
-
-**Validation to run after edits**
-- `npm run build`.
-
-**Next**
-1. Create at least one Supabase Auth user in the Supabase dashboard.
-2. Add role/permission model in DB and UI: admin, manager, member, viewer.
-3. Add Supabase Storage buckets for partner profiles, NDA, contracts, event materials.
-4. Add row-level security after server-side data reads use the authenticated session.
-
-### [2026-08-17] Claude Project/Event Seed Review
-
-**Status**: External Claude seed files reviewed; do not run as-is.
-
-**Completed**
-- Reviewed `/Users/jamesy/Downloads/files/20260817000000_xp_erp_projects_events.sql`.
-- Reviewed `/Users/jamesy/Downloads/files/etl_xp_seed.py`.
-- Reviewed `/Users/jamesy/Downloads/files/SEED_IMPORT_DESIGN.md`.
-- Reviewed `/Users/jamesy/Downloads/files/seed.sql`.
-- Added `docs/claude-seed-review.md`.
-
-**Decision**
-- The design ideas are useful, but the SQL targets a different column convention from the schema already applied here.
-- Current schema uses `name_ko`, `project_role`, `events.name`, `document_type`, `requirement_type`, `description`.
-- Claude SQL expects `name`, `role`, `events.title`, `doc_type`, `detail`, and enum casts.
-
-**Next**
-- Build an XP-native compatibility migration and adapter script. Do not paste-run Claude's generated `seed.sql`.
-
-### [2026-08-17] Demo Access Mode
-
-**Status**: Login gate temporarily removed for demo.
-
-**Completed**
-- Removed Supabase Auth route guard from `proxy.ts`.
-- Removed `/login` page and client auth components.
-- Removed `@supabase/ssr`.
-- Added `docs/demo-database-plan.md`.
-
-**Decision**
-- Demo should open directly to the XP Dashboard without requiring a Supabase Auth user.
-- Re-enable login after at least one Supabase Auth user and role policy are ready.
-
-### [2026-08-17] Customer-Centered Deal Structure
-
-**Status**: Customer menu and customer DB views added.
-
-**Completed**
-- Added `고객사` navigation.
-- Added `/customers` list page.
-- Added `/customers/[id]` detail page.
-- Added `erp_customer_rows` and `erp_customer_project_rows` views.
-- Added `docs/customer-db-blueprint.md`.
-
-**Decision**
-- `companies.id` is the customer ID.
-- `projects.company_id` is the first contract/deal/project link.
-- Do not create a standalone `contracts` table yet. Use `projects` for deal/contract workflow and `documents` / `document_requirements` for actual contract files.
-
-### [2026-08-17] Phase 5 — Supabase Wiring Started
-
-**Status**: Supabase code wiring complete; remote DB migration and seed later completed with user-provided credentials.
-
-**Completed**
-- Replaced the dark-looking transparent logo with the provided white-background logo.
-- Converted visible ERP UI copy to Korean.
-- Sidebar now shows only the XP logo and `XP Dashboard`.
-- Added Supabase packages: `@supabase/supabase-js`, `postgres`.
-- Added `.env.example` with the provided project URL.
-- Added `supabase/migrations/20260817000000_initial_schema.sql`.
-- Added `scripts/apply_migrations.mjs` and `scripts/import_supabase_seed.mjs`.
-- App data layer now reads Supabase views instead of importing the local seed JSON directly.
-- If Supabase env vars are missing, the UI does not show mock data.
-
-**Validation**
-- `npm run build` passed.
-- `npm run seed:operational` passed.
-- `npm run db:migrate` and `npm run db:seed` correctly stop with `SUPABASE_DB_URL is required`.
-
-**Blocked**
-- Need `SUPABASE_DB_URL` to apply migrations and import seed data.
-- Need `NEXT_PUBLIC_SUPABASE_ANON_KEY` for the app to read Supabase views.
-
-**Next**
-1. Add `SUPABASE_DB_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-2. Run `npm run db:migrate`.
-3. Run `npm run seed:operational`.
-4. Run `npm run db:seed`.
-5. Run `npm run build`.
-
-### [2026-08-17] Phase 3 — Operational Seed Preview Wired
-
-**Status**: Phase 3 in progress.
-
-**Completed**
-- Added `scripts/build_operational_seed.py`.
-- Generated `data/processed/operational_seed_preview.json`.
-- Wired the Next.js pages to real source-derived operational seed data instead of mock constants.
-- Dashboard, Network, Projects, Events, Documents, and Search now render from the generated seed preview.
-
-**Validation**
-- `npm run build` passed.
-- Operational seed generated 435 people, 195 projects, 157 tasks, 245 document requirements.
-
-**Next**
-1. Add Supabase project configuration/migrations under `supabase/`.
-2. Convert seed preview into idempotent DB import scripts.
-3. Add real list/detail routes backed by database queries.
-
-**Warning**
-- Current seed parsing is conservative and review-oriented. Do not treat every extracted row as clean production truth without reconciliation.
-
-### [2026-08-17] Phase 1R — Critical Spec Review Started
-
-**Status**: Phase 1R in progress.
-
-**Completed**
-- Reviewed README and old handoff critically.
-- Reviewed all 4 supplied Excel sources.
-- Reframed product around operational ERP needs.
-- Promoted Documents and Tasks from optional late phase to v1 core.
-- Added raw network and To Go source files under `data/raw/`.
-
-**Next**
-1. Add schema/migration with document requirements, tasks, import lineage.
-2. Add audit/import scripts.
-3. Start app scaffold/design system if dependency setup allows.
-
-**Warnings**
-- Do not build from the old 11-phase plan.
-- Do not skip Documents & Tasks.
-- Do not use the cleaned partner file as the only partner truth.
-- Do not make a colorful CRM UI.
+- 시드 폴백을 제품 동작으로 되돌리지 말 것 (`XP_FORCE_SEED_FALLBACK` 관련 코드는 제거됨).
+- 소스 임포트 행 무단 삭제 금지 (lineage 유지). 제품 뷰에서 필터하는 방식 유지.
+- `.env.local`, DB 비밀번호, 루트 xlsx 커밋 금지.
+- UI에 아이콘/컬러 뱃지/마케팅 문구 추가 금지.

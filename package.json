@@ -11,12 +11,20 @@
     "seed:operational": "bash scripts/run_python.sh scripts/build_operational_seed.py",
     "db:migrate": "node scripts/apply_migrations.mjs",
     "db:seed": "node scripts/import_supabase_seed.mjs",
+    "db:audit": "node scripts/audit_product_db.mjs",
+    "user:create": "node scripts/create_user.mjs",
     "db:reconcile": "node scripts/reconcile_product_db.mjs",
     "db:reconcile:plan": "node scripts/plan_product_reconciliation.mjs",
-    "db:audit": "node scripts/audit_product_db.mjs"
+    "db:export": "node scripts/export_workbook.mjs",
+    "db:import": "node scripts/import_workbook.mjs",
+    "contracts:prepare": "node scripts/prepare_contracts.mjs",
+    "contracts:import": "node scripts/import_contracts.mjs",
+    "db:status": "node scripts/migration_status.mjs"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
+    "exceljs": "^4.4.0",
     "next": "^16.0.0",
     "postgres": "^3.4.9",
     "react": "^19.0.0",

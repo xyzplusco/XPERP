@@ -1,28 +1,65 @@
-import { CustomerTable } from "@/components/CustomerTable";
-import { SectionHeader } from "@/components/SectionHeader";
-import { getCustomerRows } from "@/lib/operational-data";
+import Link from "next/link";
+import { getCustomers } from "@/lib/queries";
+import { label, truncate } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
 export default async function CustomersPage() {
-  const customerRows = await getCustomerRows(40);
+  const customers = await getCustomers();
 
   return (
     <>
-      <SectionHeader
-        eyebrow="고객사"
-        title="고객사별 딜/계약 관리"
-        description="Deal list의 회사명을 고객사 ID로 정리하고, 각 고객사에 연결된 프로젝트, 계약성 딜, 문서 미비, 액션을 함께 봅니다."
-      />
-      <section className="panel">
-        <div className="panelHeader">
-          <div>
-            <div className="panelTitle">고객사 목록</div>
-            <div className="panelMeta">companies.id → projects.company_id 기준</div>
-          </div>
+      <div className="pageHeader">
+        <h1>고객사</h1>
+        <div className="pageHeaderMeta">{customers.length}개사</div>
+      </div>
+
+      <div className="panel">
+        <div className="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>고객사</th>
+                <th>산업</th>
+                <th className="numeric">프로젝트</th>
+                <th className="numeric">진행 중</th>
+                <th className="numeric">문서 미비</th>
+                <th className="numeric">액션</th>
+                <th>상태</th>
+                <th>다음 액션</th>
+              </tr>
+            </thead>
+            <tbody>
+              {customers.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="emptyCell">
+                    표시할 고객사가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                customers.map((row) => (
+                  <tr key={row.id}>
+                    <td className="mutedText">{row.customer_id}</td>
+                    <td>
+                      <Link className="tableLink" href={`/customers/${row.id}`}>
+                        {row.customer}
+                      </Link>
+                    </td>
+                    <td>{row.industry}</td>
+                    <td className="numeric">{row.project_count}</td>
+                    <td className="numeric">{row.active_project_count}</td>
+                    <td className="numeric">{row.document_gap_count}</td>
+                    <td className="numeric">{row.task_count}</td>
+                    <td>{label(row.latest_status)}</td>
+                    <td className="mutedText">{truncate(row.next_action, 40)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-        <CustomerTable rows={customerRows} />
-      </section>
+      </div>
     </>
   );
 }

@@ -551,3 +551,167 @@ Docs:
 - Do not commit `.env.local` or Supabase DB password.
 - Do not commit confidential root-level Excel files.
 - Do not prioritize visual polish before DB review/edit/storage workflows.
+
+## [2026-08-17] Claude Fable — 앱 레이어 전면 재구축
+
+### 판단
+Codex가 만든 것 중 DB 스키마·마이그레이션 러너·임포트 파이프라인은 유지. 앱 레이어(전부 읽기 전용 리스트, 인증 없음, 상세화면 없음)는 요구사항 대비 부족해 전면 재작성.
+
+### 완료
+- **인증**: Supabase Auth 이메일/비밀번호 + `@supabase/ssr` + `proxy.ts` 세션 가드. 미로그인 시 전 경로 /login 리다이렉트.
+- **권한 (RLS)**: `20260817010000_auth_roles_rls_storage.sql`
+  - `users.auth_user_id` 추가, `xp_is_member/xp_is_admin/xp_can_edit_project` 헬퍼
+  - 전 테이블 RLS: 읽기는 등록된 활성 계정만, 쓰기는 admin 전체 / PL·PM 자기 프로젝트만
+  - anon 권한 전면 회수 (기존엔 anon key로 DB 전체 노출 상태였음)
+  - `xp-documents` private 버킷 + storage 정책
+- **계정 생성 스크립트**: `scripts/create_user.mjs` (auth.users 직접 insert, bcrypt, identities 포함, users 행 연결)
+- **화면**: 대시보드(통계+Deal List+상태필터), 고객사 목록/상세, 파트너 목록/상세(구분 필터), 프로젝트 목록/상세(편집/업데이트 타임라인/액션), 이벤트 목록/상세, 문서 레지스트리, 설정(계정 관리)
+- **상호참조**: 고객사↔프로젝트↔파트너(PL/PM/구성원) 전부 하이퍼링크
+- **문서 업로드**: 각 상세화면에서 Storage 업로드 → documents/entity_documents 기록 → 필요 문서 충족 처리(선택) → signed URL 다운로드
+- **디자인**: globals.css 재작성 — 흰 표면/헤어라인 보더/2px 룰, 그린 최소 사용, 아이콘·뱃지·마케팅 문구 없음
+- 구 파일 제거: app/network, app/search, CustomerTable/DataTable/SectionHeader, operational-data.ts (`_to_delete/`로 이동)
+
+### 검증
+- `npm run build` 통과 (Next 16.3.1)
+- 모든 PostgREST embed 쿼리를 라이브 DB에 직접 실행해 FK 힌트/컬럼명 검증 완료
+- `next start` 스모크: 미로그인 307 → /login, 로그인 페이지 렌더 확인
+- 인증된 전체 플로우는 마이그레이션 적용 전이라 미검증 (샌드박스에서 5432/6543 차단)
+
+### 다음 에이전트 필수 확인
+1. `npm install && npm run db:migrate` 로컬 실행 (적용 전엔 RLS 없음 = 배포 금지)
+2. `npm run user:create -- --email yoonks9306@gmail.com --password '...' --role admin`
+3. Supabase 대시보드에서 공개 signup 비활성화 + `erp-smoke-test@xyzplus.co` 삭제
+4. 이후 우선순위는 AGENT_HANDOFF.md §5
+
+## [2026-08-17] Claude Fable — 엑셀 왕복 데이터 정리 파이프라인
+
+### 배경
+raw data 오염(파트너 구분 칸에 이름/전화번호, `회사명` 헤더 행, A사/B사 익명 딜, PL/PM 미연결 다수)을 앱에서 한 건씩 고치는 건 비현실적. 엑셀 내보내기 → 대량 수정 → 가져오기 왕복 구조를 추가.
+
+### 추가된 것
+- `scripts/lib/workbook_schema.mjs` — 시트/열/드롭다운 정의. export·import가 이 파일 하나를 공유하므로 열 추가 시 한 곳만 고치면 됨.
+- `scripts/lib/db.mjs` — 접속 헬퍼. `sslmode=disable` 이면 SSL 끔(로컬 테스트용).
+- `scripts/export_workbook.mjs` (`npm run db:export`) — 고객사/파트너/프로젝트/참고 4시트. ID 열 회색 잠금, 드롭다운 데이터 유효성 검사, PL/PM·고객사는 이름으로 표시, 오염된 partner_status는 '기존 구분값(참고)' 열로 분리.
+- `scripts/import_workbook.mjs` (`npm run db:import`) — 기본 dry-run, `--apply` 로 반영. 단일 트랜잭션.
+- 의존성 `exceljs` 추가.
+
+### 설계 결정
+- ID 있으면 UPDATE(바뀐 열만), 비어 있으면 INSERT. 삭제는 엑셀 행 삭제가 아니라 '삭제'=Y 열로만 (실수 방지).
+- 시트 처리 순서 고객사 → 파트너 → 프로젝트. 같은 파일에서 만든 신규 고객사/파트너를 신규 프로젝트가 참조 가능 (PENDING 마커로 해소).
+- 삭제 참조 검사는 '같은 파일에서 함께 삭제되는 프로젝트'를 제외하고 판정 → 쓰레기 회사 + 딸린 쓰레기 프로젝트 동시 삭제 가능.
+- 동명이인은 자동 매칭하지 않고 오류로 보고 (잘못된 사람에게 프로젝트가 붙는 게 최악).
+- 변경 전/후를 `activity_logs` 에 `excel_insert/update/delete` 로 기록.
+
+### 검증 (컨테이너에 Postgres 16 띄워 실 스키마 재현 후 end-to-end)
+- 오류 5종 정확히 검출: 참조 있는 회사 삭제 시도, 드롭다운 외 값, 동명이인 PL/PM, 없는 고객사 참조, ID 훼손
+- 정상 반영 10건: 수정/신규/삭제 + 신규 프로젝트가 신규 고객사·신규 파트너를 정확히 참조
+- 멱등성 확인: 내보내기 → 무수정 가져오기 = 변경 0건
+- numeric(18,2) 이 `"300000000.00"` 로 돌아와 매출이 매번 변경으로 잡히던 버그 수정
+
+### 다음
+- 주차별 업데이트 임포트, 매출 실적 테이블, 앱 내 신규 생성 폼은 아직 미착수 (AGENT_HANDOFF.md §5)
+
+## [2026-08-17] Claude Fable — 회의록 모듈 + 전자계약 데이터 반영
+
+### 1) 회의록 (업체별 전용 버킷)
+- 마이그레이션 `20260817020000_meeting_notes.sql`
+  - `meeting_notes` 테이블 (company_id / project_id, meeting_date, attendees, summary, 스토리지 메타)
+  - 전용 버킷 `xp-meeting-notes` (private). 계약/NDA의 `xp-documents` 와 분리.
+  - 정렬 인덱스: (company_id, meeting_date desc, created_at desc), 프로젝트도 동일
+  - RLS: 등록 구성원 열람·업로드, 본인 업로드분 수정/삭제, admin 전체
+- `components/MeetingNotesPanel.tsx` — 업로드 폼(회의일자·제목·참석자·파일) + 회의 일자 최신순 타임라인 + 삭제
+- 고객사 상세(업체 단위, 프로젝트 회의록 포함 표시)와 프로젝트 상세에 배치
+- 정렬 로직: meeting_date DESC → 동일 날짜면 created_at DESC. 등록순이 아니라 **회의가 열린 날짜** 기준.
+
+### 2) 전자계약 내보내기 반영
+입력: `data/contracts/contracts_customers.xlsx` (79건), `contracts_partners.xlsx` (59건)
+
+- `scripts/lib/contracts.mjs` — 제목→문서종류 판정, 서명참여자 파싱, 인명 추정
+- `scripts/prepare_contracts.mjs` (`npm run contracts:prepare`) — DB 명단과 대조해 매칭 추천 → 검토용 엑셀
+- `scripts/import_contracts.mjs` (`npm run contracts:import`) — 검토표 → DB. dry-run 기본, `--apply` 로 반영
+
+매칭 전략 (우선순위):
+1. 서명 이메일 ↔ people.email 정확 일치
+2. 계약 제목 안에 등록된 회사명/사람 이름이 포함되는지 (가장 긴 일치 우선)
+3. 서명자 표시 이름 또는 제목 토큰에서 인명 추정 → '확인 필요' 로 표시
+
+반영 내용: documents 등록(memo에 `contract_id=` 보관하여 중복 방지) → entity_documents 연결 →
+NDA 계약이면 network_profiles.nda_status='O' → 해당 대상의 미충족 document_requirements를 'signed' 처리 → activity_logs 기록.
+
+### 검증 (로컬 Postgres에 실 스키마 + 실제 계약 138건)
+- 자동 매칭 128/138 (이메일 2, 이름·회사명 126), 확인 필요 10건은 모두 실제로 모호한 건
+- 오탐 2종 수정: `경력증명서(한글)` 의 "한글"을 인명으로 잡던 문제, 파트너 시트의 회사 상대 계약을 사람으로 잡던 문제
+- 반영 결과: documents 128, entity_documents 128, NDA 완료 43명, 요구사항 충족 3건
+- 재실행 시 128건 전부 '이미 반영됨' 으로 건너뜀 (멱등)
+- 마이그레이션 6개 전부 auth/storage 스텁 환경에서 무오류 적용 확인
+
+### 남은 것
+- 확인 필요 10건은 James가 검토표에서 직접 지정 (미등록 인물은 db:export/db:import 로 먼저 등록)
+- 계약 실물 파일은 전자계약 시스템에 있음. ERP에는 메타데이터만 등록됨.
+
+## [2026-08-17] 엑셀 왕복 실사용 피드백 반영
+
+James가 실제로 편집한 워크북(파트너 31행 삭제 표시, 신규 23행)을 그의 DB 구조로 재현해 검증한 결과 발견한 문제들:
+
+1. **드롭다운 목록이 실무 표현과 불일치** → 오류 31건 중 대부분이 이것
+   - 프로젝트 상태에 '진행 중'이 없어 17행 거부됨. `managed` 의 표시값을 '관리 중' → **'진행 중'** 으로 변경 (lib/labels.ts 포함)
+   - NDA/프로필/위촉 칸의 'Y', 날짜(2025.12.10) 거부됨
+   - 구분 칸의 '후보' 거부됨
+   → `toDb()` 에 별칭(aliases) 3번째 요소 추가. 문서 상태 칸은 `dateMeansDone` 옵션으로 날짜를 '완료'로 해석.
+   → 오류 31건 → 11건으로 감소, 프로젝트 반영 101 → 115건
+
+2. **readOnly 열 추가 시 기존 편집 파일이 깨지는 문제**
+   → 헤더 검사에서 readOnly 열은 제외. 이전 버전 내보내기 파일도 그대로 가져올 수 있음.
+
+3. **오류 출력이 눈에 안 띔** → 구분선 추가, 표시 건수 40 → 60,
+   '먼저 등록해야 할 이름'을 참조 횟수와 함께 한 번에 모아 출력.
+
+4. **품질 경고 열 추가** (`scripts/lib/quality.mjs`)
+   - 파트너: 이름 칸이 직함/이메일/전화번호, 소속 칸이 이메일, 이름·이메일 중복, 정보 없음
+   - 고객사: 헤더 행, 익명 딜(A사), 사람 이름과 동일, 연결 프로젝트 없음
+   - 엑셀에서 이 열로 필터하면 정리 대상만 모아 볼 수 있음
+
+검증: 그의 실제 편집 파일로 --apply 실행 → people 435 → 427 (삭제 31, 신규 23),
+'CEO/CFO/CMO/CSO/대표/이사' 등 직함이 이름인 행 0건 잔존, activity_logs 681건 기록.
+
+**중요**: 삭제가 반영되지 않았던 원인은 코드 문제가 아니라 `--apply` 미실행이었음.
+dry-run 은 절대 DB를 건드리지 않는다는 점을 다음 에이전트도 유의.
+
+## [2026-08-17] User Flow 고도화 — 폴더 / 티켓 / 이벤트 개편
+
+### 설계 결정 (IT PM 관점)
+- **티켓은 새 테이블을 만들지 않고 기존 `tasks` 를 그대로 사용.** `project_id` 가 null 이면 Unsorted 티켓,
+  값이 있으면 해당 프로젝트 소속. "티켓"과 "액션"이 분리되면 기록 위치가 이원화되어 반드시 유실이 생긴다.
+- **폴더는 고정 상수가 아니라 `project_folders` 테이블.** 사용자가 "ERP 관련 프로젝트가 따로 있을 수도"라고
+  언급했으므로 폴더 추가에 마이그레이션이 필요 없어야 한다.
+- **담당자(Responsible)는 `tasks.assignee_person_id` → people.** 계정(users)이 아니라 people 을 가리키는 이유는
+  계정 없는 파트너에게도 책임을 지정할 수 있어야 하기 때문. 지정 후보는 XP 내부 · 계정 보유자 · 프로젝트 PL 로 자동 구성.
+
+### 마이그레이션 20260817030000_folders_tickets_events.sql
+- `project_folders` + 시드 4개 (Re-Engineering / Go Global / AX / XP 경영), `projects.folder_id`
+- `tasks.assignee_person_id`, 미분류 티켓용 부분 인덱스
+- **tasks RLS 수정**: 기존 정책이 `project_id is not null` 을 요구해서 미분류 티켓 생성이 원천 차단되어 있었음.
+  구성원은 미분류 티켓 생성 가능, 본인 생성/담당 티켓 또는 담당 프로젝트 티켓 수정 가능하도록 재작성.
+- `events.is_date_tbd`
+- **`event_type='source_task'` 이벤트 23건 삭제.** 연결된 event_invitees/document_requirements 정리,
+  `tasks.event_id` 는 null 로 해제하여 **액션 자체는 tasks 에 그대로 보존**(사용자 요청: 그런 건 프로젝트 안 티켓이 맞다).
+- events / event_invitees 를 구성원 누구나 운영할 수 있도록 정책 완화 (행사 운영은 협업 작업)
+
+### 화면
+- 사이드바: 로고 28px → 44px, "XP ERP" 텍스트 제거, 하단에 큰 **티켓 생성** 버튼
+- `components/TicketDialog.tsx` — 어느 화면에서든 뜨는 팝업. 담당자는 **칩 버튼**으로 원클릭 지정,
+  프로젝트는 검색 후 선택(비우면 미분류), 기한·우선순위. Esc/배경클릭으로 닫힘.
+- `/tickets` — 미분류 / 진행 중 / 전체 탭. 표에서 담당자·프로젝트·상태·기한을 인라인 변경.
+  '프로젝트에 넣기' 버튼으로 미분류 티켓을 프로젝트로 이동.
+- `/projects` — 폴더 탭 필터(전체 / 4개 폴더 / Unsorted, 각 건수 표시). 상세에서 admin 이 폴더 지정.
+- 이벤트 전면 개편:
+  - 목록에 초대/참가확정 인원 수, 일시 미정 표시
+  - 상세: 현황 요약(초대·이메일·문자·회신·참가확정·불참)
+  - `components/InviteeManager.tsx` — **명단 붙여넣기 일괄 추가**(탭/콤마 인식, 이메일·전화 위치 자동 판별,
+    이름이 파트너와 유일 일치하면 자동 연결), 행별 4개 플래그 체크박스, 참석 여부 선택, 삭제
+  - 복사 버튼: 전체/선택 이메일, 전체/선택 전화번호, **미회신자 이메일**(팔로업용), **참가확정 명단**(현장 체크인용)
+
+### 검증
+- 마이그레이션 7개 전부 무오류 적용, 재실행 안전
+- source_task 이벤트 삭제 확인: 임시 이벤트 제거·실제 이벤트 보존·고아 초대자 0·태스크는 event_id 만 해제되고 보존
+- `npm run build` 통과

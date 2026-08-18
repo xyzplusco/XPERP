@@ -1,47 +1,75 @@
-import { DataTable } from "@/components/DataTable";
-import { SectionHeader } from "@/components/SectionHeader";
-import { getProjectRows, getProjectTypeSummary } from "@/lib/operational-data";
+import Link from "next/link";
+import { DealTable } from "@/components/DealTable";
+import { getDeals, getFolderCounts, getFolders } from "@/lib/queries";
+import { label, PROJECT_STATUS_OPTIONS } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectsPage() {
-  const [activeProjects, projectTypeSummary] = await Promise.all([
-    getProjectRows(18),
-    getProjectTypeSummary(),
-  ]);
+export default async function ProjectsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; folder?: string }>;
+}) {
+  const { status, folder = "all" } = await searchParams;
+
+  const [folders, folderCounts] = await Promise.all([getFolders(), getFolderCounts()]);
+
+  const activeFolder = folders.find((item) => item.id === folder);
+  const deals = await getDeals({
+    status,
+    folderId: activeFolder?.id,
+    unsorted: folder === "unsorted",
+  });
+
+  const tabHref = (key: string) =>
+    `/projects?folder=${key}${status ? `&status=${status}` : ""}`;
 
   return (
     <>
-      <SectionHeader
-        eyebrow="프로젝트"
-        title="딜 및 프로젝트 파이프라인"
-        description="Deal list 이력, 주차별 업데이트, PL/PM, 문서 필요 항목, 다음 액션을 함께 관리합니다."
-      />
-      <div className="toolbar" aria-label="프로젝트 필터">
-        {projectTypeSummary.map((row, index) => (
-          <span className="filterPill" data-selected={index === 0 ? "true" : undefined} key={row.type}>
-            {row.type} {row.count}
-          </span>
-        ))}
+      <div className="pageHeader">
+        <h1>프로젝트</h1>
+        <div className="pageHeaderMeta">{deals.length}건</div>
       </div>
-      <section className="panel">
-        <div className="panelHeader">
-          <div>
-            <div className="panelTitle">프로젝트 목록</div>
-            <div className="panelMeta">Supabase projects 기준</div>
-          </div>
-        </div>
-        <DataTable
-          columns={[
-            { key: "company", label: "회사" },
-            { key: "type", label: "유형" },
-            { key: "pl", label: "PL" },
-            { key: "pm", label: "PM" },
-            { key: "next", label: "다음 액션" },
-          ]}
-          rows={activeProjects}
-        />
-      </section>
+
+      <div className="tabRow">
+        <Link href={tabHref("all")} className={folder === "all" ? "tab tabOn" : "tab"}>
+          전체
+          <span className="tabCount">{folderCounts.total}</span>
+        </Link>
+        {folders.map((item) => (
+          <Link
+            key={item.id}
+            href={tabHref(item.id)}
+            className={folder === item.id ? "tab tabOn" : "tab"}
+          >
+            {item.name}
+            <span className="tabCount">{folderCounts.counts.get(item.id) ?? 0}</span>
+          </Link>
+        ))}
+        <Link href={tabHref("unsorted")} className={folder === "unsorted" ? "tab tabOn" : "tab"}>
+          Unsorted
+          <span className="tabCount">{folderCounts.unsorted}</span>
+        </Link>
+      </div>
+
+      <form className="filterBar" method="get">
+        <input type="hidden" name="folder" value={folder} />
+        <select name="status" defaultValue={status ?? ""}>
+          <option value="">전체 상태</option>
+          {PROJECT_STATUS_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {label(option)}
+            </option>
+          ))}
+        </select>
+        <button className="smallButton" type="submit">
+          적용
+        </button>
+      </form>
+
+      <div className="panel">
+        <DealTable rows={deals} />
+      </div>
     </>
   );
 }

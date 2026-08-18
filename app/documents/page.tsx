@@ -1,44 +1,122 @@
-import { DataTable } from "@/components/DataTable";
-import { SectionHeader } from "@/components/SectionHeader";
-import { getDocumentRequirementRows } from "@/lib/operational-data";
+import Link from "next/link";
+import { getAllDocuments } from "@/lib/queries";
+import { formatDate, formatDateTime, label } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
 export default async function DocumentsPage() {
-  const documentGaps = await getDocumentRequirementRows(24);
+  const { documents, requirements } = await getAllDocuments();
 
   return (
     <>
-      <SectionHeader
-        eyebrow="문서"
-        title="파일 보관보다 먼저 필요한 문서 상태"
-        description="NDA, 프로필, 위촉, MOU, 계약서, 만료, 면제, 담당자를 파일 업로드 전부터 추적합니다."
-      />
-      <div className="toolbar" aria-label="문서 필터">
-        <span className="filterPill" data-selected="true">미비</span>
-        <span className="filterPill">요청</span>
-        <span className="filterPill">수령</span>
-        <span className="filterPill">서명 완료</span>
-        <span className="filterPill">만료 예정</span>
-      </div>
-      <section className="panel">
-        <div className="panelHeader">
-          <div>
-            <div className="panelTitle">문서 필요 항목</div>
-            <div className="panelMeta">단순 파일 목록이 아니라 운영 상태 큐</div>
-          </div>
+      <div className="pageHeader">
+        <h1>문서</h1>
+        <div className="pageHeaderMeta">
+          보관 {documents.length}건 · 미비 {requirements.length}건
         </div>
-        <DataTable
-          columns={[
-            { key: "subject", label: "대상" },
-            { key: "type", label: "필요 문서" },
-            { key: "owner", label: "담당" },
-            { key: "status", label: "상태" },
-            { key: "due", label: "기한" },
-          ]}
-          rows={documentGaps}
-        />
-      </section>
+      </div>
+
+      <div className="panel">
+        <div className="panelHeader">
+          <div className="panelTitle">보관 문서</div>
+          <div className="panelMeta">업로드는 각 고객사 · 파트너 · 프로젝트 화면에서</div>
+        </div>
+        <div className="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th>문서명</th>
+                <th>종류</th>
+                <th>보안 구분</th>
+                <th>등록일</th>
+                <th>파일</th>
+              </tr>
+            </thead>
+            <tbody>
+              {documents.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="emptyCell">
+                    보관된 문서가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                documents.map((doc) => (
+                  <tr key={doc.id}>
+                    <td>{doc.title}</td>
+                    <td>{doc.document_type}</td>
+                    <td>{doc.sensitivity === "internal" ? "내부" : doc.sensitivity === "confidential" ? "대외비" : "제한"}</td>
+                    <td className="mutedText">{formatDateTime(doc.uploaded_at)}</td>
+                    <td>
+                      {doc.url ? (
+                        <a className="tableLink" href={doc.url} target="_blank" rel="noreferrer">
+                          {doc.file_name ?? "열기"}
+                        </a>
+                      ) : (
+                        <span className="faintText">–</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panelHeader">
+          <div className="panelTitle">필요 문서 (미비)</div>
+          <div className="panelMeta">NDA · 프로필 · 위촉 · 계약</div>
+        </div>
+        <div className="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th>대상</th>
+                <th>문서</th>
+                <th>종류</th>
+                <th>상태</th>
+                <th>기한</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requirements.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="emptyCell">
+                    미비 문서가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                requirements.map((req) => (
+                  <tr key={req.id}>
+                    <td>
+                      {req.person ? (
+                        <Link className="tableLink" href={`/partners/${req.person.id}`}>
+                          {req.person.name_ko}
+                        </Link>
+                      ) : req.company ? (
+                        <Link className="tableLink" href={`/customers/${req.company.id}`}>
+                          {req.company.name_ko}
+                        </Link>
+                      ) : req.project ? (
+                        <Link className="tableLink" href={`/projects/${req.project.id}`}>
+                          {req.project.name}
+                        </Link>
+                      ) : (
+                        req.subject_text ?? "–"
+                      )}
+                    </td>
+                    <td>{req.title}</td>
+                    <td>{req.requirement_type}</td>
+                    <td>{label(req.status)}</td>
+                    <td className="mutedText">{formatDate(req.required_by ?? req.expires_at)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </>
   );
 }

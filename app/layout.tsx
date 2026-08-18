@@ -1,22 +1,24 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { getSessionUser } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "XP Dashboard",
-  description: "XP 네트워크, 프로젝트, 이벤트, 문서, 액션 관리 대시보드.",
+  title: "XP ERP",
+  description: "XP 내부 운영 관리 시스템",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  let user = null;
+  try {
+    user = await getSessionUser();
+  } catch {
+    user = null;
+  }
+
   return (
     <html lang="ko">
-      <body>
-        <AppShell>{children}</AppShell>
-      </body>
+      <body>{user ? <AppShell user={user}>{children}</AppShell> : children}</body>
     </html>
   );
 }

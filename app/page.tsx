@@ -1,104 +1,77 @@
-import { DataTable } from "@/components/DataTable";
-import {
-  getCustomerRows,
-  getDocumentRequirementRows,
-  getProjectRows,
-  getSourceStats,
-  getTaskRows,
-} from "@/lib/operational-data";
-import { CustomerTable } from "@/components/CustomerTable";
+import Link from "next/link";
+import { DealTable } from "@/components/DealTable";
+import { getDashboardStats, getDeals } from "@/lib/queries";
+import { label, PROJECT_STATUS_OPTIONS } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
-  const [sourceStats, customerRows, activeProjects, documentGaps, taskRows] = await Promise.all([
-    getSourceStats(),
-    getCustomerRows(8),
-    getProjectRows(8),
-    getDocumentRequirementRows(8),
-    getTaskRows(8),
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const { status } = await searchParams;
+  const [stats, deals] = await Promise.all([
+    getDashboardStats(),
+    getDeals(status ? { status } : undefined),
   ]);
 
   return (
     <>
-      <section className="gridStats" aria-label="Source stats">
-        {sourceStats.map((stat) => (
-          <div className="statCard" key={stat.label}>
-            <div className="statLabel">{stat.label}</div>
-            <div className="statValue">{stat.value}</div>
-            <div className="statDetail">{stat.detail}</div>
-          </div>
-        ))}
-      </section>
+      <div className="pageHeader">
+        <h1>대시보드</h1>
+        <div className="pageHeaderMeta">{new Date().toLocaleDateString("ko-KR")} 기준</div>
+      </div>
 
-      <section className="twoColumn">
-        <div className="panel">
-          <div className="panelHeader">
-            <div>
-              <div className="panelTitle">진행 프로젝트 관리</div>
-              <div className="panelMeta">PL/PM, 프로젝트 유형, 다음 액션</div>
-            </div>
-            <div className="accentLine" />
-          </div>
-          <DataTable
-            columns={[
-              { key: "company", label: "회사" },
-              { key: "type", label: "유형" },
-              { key: "pl", label: "PL" },
-              { key: "pm", label: "PM" },
-              { key: "next", label: "다음 액션" },
-            ]}
-            rows={activeProjects}
-          />
+      <div className="statRow">
+        <div className="statCell">
+          <div className="statLabel">고객사</div>
+          <div className="statValue">{stats.customers}</div>
         </div>
-
-        <div className="panel">
-          <div className="panelHeader">
-            <div>
-              <div className="panelTitle">문서 미비 항목</div>
-              <div className="panelMeta">NDA, 프로필, 위촉, MOU</div>
-            </div>
-          </div>
-          <DataTable
-            columns={[
-              { key: "subject", label: "대상" },
-              { key: "type", label: "문서" },
-              { key: "owner", label: "담당" },
-              { key: "status", label: "상태" },
-              { key: "due", label: "기한" },
-            ]}
-            rows={documentGaps}
-          />
+        <div className="statCell">
+          <div className="statLabel">진행 프로젝트</div>
+          <div className="statValue">{stats.activeProjects}</div>
         </div>
-      </section>
+        <div className="statCell">
+          <div className="statLabel">확정 계약</div>
+          <div className="statValue">{stats.confirmed}</div>
+        </div>
+        <div className="statCell">
+          <div className="statLabel">파트너 네트워크</div>
+          <div className="statValue">{stats.people}</div>
+        </div>
+        <div className="statCell">
+          <div className="statLabel">문서 미비</div>
+          <div className="statValue">{stats.openDocs}</div>
+        </div>
+        <div className="statCell">
+          <div className="statLabel">미처리 액션</div>
+          <div className="statValue">{stats.openTasks}</div>
+        </div>
+      </div>
 
-      <section className="panel">
+      <div className="panel">
         <div className="panelHeader">
-          <div>
-            <div className="panelTitle">고객사별 Deal 관리</div>
-            <div className="panelMeta">Deals_0731 회사명 → 고객사 ID → 연결 프로젝트</div>
-          </div>
+          <div className="panelTitle">Deal List</div>
+          <form className="filterBar" method="get">
+            <select name="status" defaultValue={status ?? ""}>
+              <option value="">전체 상태</option>
+              {PROJECT_STATUS_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {label(option)}
+                </option>
+              ))}
+            </select>
+            <button className="smallButton" type="submit">
+              적용
+            </button>
+            <Link className="smallButton" href="/projects" style={{ display: "inline-block" }}>
+              전체 보기
+            </Link>
+          </form>
         </div>
-        <CustomerTable rows={customerRows} />
-      </section>
-
-      <section className="panel">
-        <div className="panelHeader">
-          <div>
-            <div className="panelTitle">다음 액션</div>
-            <div className="panelMeta">To Go List에서 정리한 운영 액션</div>
-          </div>
-        </div>
-        <DataTable
-          columns={[
-            { key: "title", label: "액션" },
-            { key: "owner", label: "담당" },
-            { key: "link", label: "연결" },
-            { key: "status", label: "상태" },
-          ]}
-          rows={taskRows}
-        />
-      </section>
+        <DealTable rows={deals.slice(0, 30)} />
+      </div>
     </>
   );
 }

@@ -811,3 +811,154 @@ export async function getTrash() {
 
   return groups;
 }
+
+// ---------------------------------------------------------------- 내 업무 / 주차 업데이트
+
+// 내가 PL·PM·구성원으로 붙어 있는 프로젝트 id
+async function myProjectIds(personId: string | null): Promise<string[]> {
+  if (!personId) return [];
+  const supabase = await createSupabaseServer();
+  const [owned, member] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("id")
+      .is("deleted_at", null)
+      .or(
+        `primary_pl_person_id.eq.${personId},secondary_pl_person_id.eq.${personId},candidate_pm_person_id.eq.${personId}`
+      ),
+    supabase.from("project_members").select("project_id").eq("person_id", personId),
+  ]);
+  const ids = new Set<string>();
+  for (const row of (owned.data ?? []) as { id: string }[]) ids.add(row.id);
+  for (const row of (member.data ?? []) as { project_id: string }[]) ids.add(row.project_id);
+  return Array.from(ids);
+}
+
+export type MyProject = {
+  id: string;
+  name: string;
+  status: string;
+  contract_status: string | null;
+  company: string | null;
+  lastUpdateDate: string | null;
+  lastUpdateLabel: string | null;
+};
+
+// 프로젝트별 마지막 주차 업데이트
+async function lastUpdateByProject(projectIds: string[]) {
+  const map = new Map<string, { date: string | null; label: string | null }>();
+  if (projectIds.length === 0) return map;
+  const supabase = await createSupabaseServer();
+  const { data } = await supabase
+    .from("project_weekly_updates")
+    .select("project_id, update_date, update_label")
+    .in("project_id", projectIds)
+    .order("update_date", { ascending: false, nullsFirst: false })
+    .limit(2000);
+  for (const row of (data ?? []) as { project_id: string; update_date: string | null; update_label: string | null }[]) {
+    if (!map.has(row.project_id)) map.set(row.project_id, { date: row.update_date, label: row.update_label });
+  }
+  return map;
+}
+
+export async function getMyWork(personId: string | null) {
+  const supabase = await createSupabaseServer();
+  const ids = await myProjectIds(personId);
+
+  const [ticketsRes, projectsRes] = await Promise.all([
+    personId
+      ? supabase
+          .from("tasks")
+          .select(TICKET_SELECT)
+          .is("deleted_at", null)
+          .eq("assignee_person_id", personId)
+          .in("status", ["backlog", "in_progress", "waiting", "blocked"])
+          .order("due_date", { ascending: true, nullsFirst: false })
+          .limit(100)
+      : Promise.resolve({ data: [] }),
+    ids.length > 0
+      ? supabase
+          .from("projects")
+          .select("id, name, status, contract_status, company:companies!projects_company_id_fkey(name_ko)")
+          .in("id", ids)
+          .is("deleted_at", null)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const lastMap = await lastUpdateByProject(ids);
+
+  const projects: MyProject[] = ((projectsRes.data ?? []) as unknown as Record<string, unknown>[])
+    .map((row) => {
+      const company = one(row.company as { name_ko: string } | { name_ko: string }[]);
+      const last = lastMap.get(row.id as string);
+      return {
+        id: row.id as string,
+        name: row.name as string,
+        status: row.status as string,
+        contract_status: (row.contract_status as string) ?? null,
+        company: company?.name_ko ?? null,
+        lastUpdateDate: last?.date ?? null,
+        lastUpdateLabel: last?.label ?? null,
+      };
+    })
+    .sort((a, b) => String(a.lastUpdateDate ?? "").localeCompare(String(b.lastUpdateDate ?? "")));
+
+  const tickets = ((ticketsRes.data ?? []) as unknown as Record<string, unknown>[]).map(normalizeTicket);
+
+  return { tickets, projects };
+}
+
+export type WeeklyRow = {
+  projectId: string;
+  name: string;
+  company: string | null;
+  contract_status: string | null;
+  current: string;
+  previous: string;
+};
+
+// 주차 작성 화면용 — 내 프로젝트 + 해당 주차 기존 내용 + 지난 주차 내용
+export async function getWeeklyBoard(personId: string | null, label: string, previousLabel: string) {
+  const supabase = await createSupabaseServer();
+  const ids = await myProjectIds(personId);
+  if (ids.length === 0) return [] as WeeklyRow[];
+
+  const [projectsRes, updatesRes] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("id, name, contract_status, company:companies!projects_company_id_fkey(name_ko)")
+      .in("id", ids)
+      .is("deleted_at", null),
+    supabase
+      .from("project_weekly_updates")
+      .select("project_id, update_label, body")
+      .in("project_id", ids)
+      .in("update_label", [label, previousLabel]),
+  ]);
+
+  const current = new Map<string, string>();
+  const previous = new Map<string, string>();
+  for (const row of (updatesRes.data ?? []) as { project_id: string; update_label: string; body: string }[]) {
+    if (row.update_label === label) current.set(row.project_id, row.body);
+    else if (row.update_label === previousLabel) previous.set(row.project_id, row.body);
+  }
+
+  return ((projectsRes.data ?? []) as unknown as Record<string, unknown>[])
+    .map((row) => {
+      const company = one(row.company as { name_ko: string } | { name_ko: string }[]);
+      return {
+        projectId: row.id as string,
+        name: row.name as string,
+        company: company?.name_ko ?? null,
+        contract_status: (row.contract_status as string) ?? null,
+        current: current.get(row.id as string) ?? "",
+        previous: previous.get(row.id as string) ?? "",
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+}
+
+// 프로젝트 목록에 붙일 마지막 업데이트 (정체 감지용)
+export async function getLastUpdateMap(projectIds: string[]) {
+  return lastUpdateByProject(projectIds);
+}

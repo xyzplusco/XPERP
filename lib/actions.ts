@@ -821,3 +821,78 @@ export async function emptyTrashAction(entity: string) {
   revalidatePath("/trash");
   redirect("/trash?saved=1");
 }
+
+// ---------------------------------------------------------------- 주차 업데이트
+
+// 한 화면에서 여러 프로젝트의 주차 업데이트를 한 번에 저장한다.
+// PL 이 직접 쓰면 그게 곧 파이프라인이 된다 (경영지원 재입력 제거).
+export async function saveWeeklyUpdatesAction(formData: FormData) {
+  const label = text(formData, "label");
+  const date = text(formData, "date");
+  if (!label) redirect("/weekly?error=empty");
+
+  const supabase = await createSupabaseServer();
+  const user = await getSessionUser();
+
+  const entries: { projectId: string; body: string | null }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("body_")) continue;
+    const projectId = key.slice(5);
+    const body = typeof value === "string" ? value.trim() : "";
+    entries.push({ projectId, body: body === "" ? null : body });
+  }
+  if (entries.length === 0) redirect(`/weekly?label=${encodeURIComponent(label)}&error=empty`);
+
+  let saved = 0;
+  let cleared = 0;
+
+  for (const entry of entries) {
+    const { data: existing } = await supabase
+      .from("project_weekly_updates")
+      .select("id")
+      .eq("project_id", entry.projectId)
+      .eq("update_label", label)
+      .maybeSingle();
+
+    if (entry.body === null) {
+      // 비우면 해당 주차 기록을 지운다 (오기입 정정)
+      if (existing) {
+        await supabase.from("project_weekly_updates").delete().eq("id", existing.id);
+        cleared += 1;
+      }
+      continue;
+    }
+
+    if (existing) {
+      const { error } = await supabase
+        .from("project_weekly_updates")
+        .update({ body: entry.body, update_date: date })
+        .eq("id", existing.id);
+      if (error) {
+        console.error("saveWeeklyUpdatesAction update", error.message);
+        continue;
+      }
+    } else {
+      const { error } = await supabase.from("project_weekly_updates").insert({
+        project_id: entry.projectId,
+        update_label: label,
+        update_date: date,
+        body: entry.body,
+        created_by_user_id: user?.appUserId ?? null,
+      });
+      if (error) {
+        console.error("saveWeeklyUpdatesAction insert", error.message);
+        continue;
+      }
+    }
+
+    // 딜 목록에 바로 반영되도록 최신 내용도 갱신
+    await supabase.from("projects").update({ latest_update: entry.body }).eq("id", entry.projectId);
+    saved += 1;
+  }
+
+  revalidatePath("/weekly");
+  revalidatePath("/");
+  revalidatePath("/projects");
+  redirect(`/weekly?label=${encodeURIComponent(label)}&saved=${saved}&cleared=${cleared}`);
+}

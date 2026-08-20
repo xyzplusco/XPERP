@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable";
 import { SaveNotice } from "@/components/SaveNotice";
-import { getDeals, getFolderCounts, getFolders, getLastUpdateMap } from "@/lib/queries";
+import { getDeals, getFolderCounts, getFolders, getLastUpdateMap, getPersonOptions } from "@/lib/queries";
+import { getSessionUser, isOwner } from "@/lib/auth";
 import { label, PROJECT_STATUS_OPTIONS, PROJECT_TYPE_OPTIONS, formatDate } from "@/lib/labels";
 import { daysSince } from "@/lib/week";
 
@@ -14,7 +15,12 @@ export default async function ProjectsPage({
 }) {
   const { status, folder = "all", view = "active", saved, trashed, error } = await searchParams;
 
-  const [folders, folderCounts] = await Promise.all([getFolders(), getFolderCounts()]);
+  const [folders, folderCounts, peopleOptions, user] = await Promise.all([
+    getFolders(),
+    getFolderCounts(),
+    getPersonOptions(),
+    getSessionUser(),
+  ]);
   const activeFolder = folders.find((item) => item.id === folder);
   const allDeals = await getDeals({
     status,
@@ -48,15 +54,15 @@ export default async function ProjectsPage({
   const typeOptions: [string, string][] = PROJECT_TYPE_OPTIONS.map((v) => [v, label(v)]);
 
   const columns: ColumnDef[] = [
-    { key: "company", header: "고객사", width: "14%", kind: "readonly" },
-    { key: "name", header: "프로젝트명", width: "20%", kind: "text" },
-    { key: "folder_id", header: "폴더", width: "11%", kind: "select", options: folderOptions },
-    { key: "project_type", header: "유형", width: "10%", kind: "select", options: typeOptions },
-    { key: "status", header: "상태", width: "9%", kind: "select", options: statusOptions },
-    { key: "pl", header: "PL", width: "8%", kind: "readonly" },
-    { key: "pm", header: "PM", width: "8%", kind: "readonly" },
-    { key: "last_update", header: "마지막 업데이트", width: "11%", kind: "readonly" },
-    { key: "next_action", header: "다음 액션", kind: "text" },
+    { key: "company", header: "고객사", width: 120, kind: "readonly" },
+    { key: "name", header: "프로젝트명", width: 200, kind: "text" },
+    { key: "folder_id", header: "폴더", width: 150, kind: "select", options: folderOptions },
+    { key: "project_type", header: "유형", width: 110, kind: "select", options: typeOptions },
+    { key: "status", header: "상태", width: 90, kind: "select", options: statusOptions },
+    { key: "primary_pl_person_id", header: "PL", width: 100, kind: "select", options: peopleOptions },
+    { key: "candidate_pm_person_id", header: "PM", width: 100, kind: "select", options: peopleOptions },
+    { key: "last_update", header: "마지막 업데이트", width: 130, kind: "readonly" },
+    { key: "next_action", header: "다음 액션", width: 320, kind: "text" },
   ];
 
   const rows: BulkRow[] = deals.map((deal) => ({
@@ -69,8 +75,8 @@ export default async function ProjectsPage({
       folder_id: folders.find((f) => f.id === deal.folder_id)?.name ?? "Unsorted",
       project_type: label(deal.project_type),
       status: label(deal.status),
-      pl: deal.pl?.name_ko ?? "",
-      pm: deal.pm?.name_ko ?? "",
+      primary_pl_person_id: deal.pl?.name_ko ?? "",
+      candidate_pm_person_id: deal.pm?.name_ko ?? "",
       last_update: (() => {
         const last = lastMap.get(deal.id);
         if (!last?.label) return "기록 없음";
@@ -81,6 +87,8 @@ export default async function ProjectsPage({
     },
     raw: {
       name: deal.name,
+      primary_pl_person_id: deal.pl?.id ?? "",
+      candidate_pm_person_id: deal.pm?.id ?? "",
       folder_id: deal.folder_id ?? "",
       project_type: deal.project_type,
       status: deal.status,
@@ -99,7 +107,7 @@ export default async function ProjectsPage({
     <>
       <div className="pageHeader">
         <h1>프로젝트</h1>
-        <div className="pageHeaderMeta">{deals.length}건 · 셀을 더블클릭하면 바로 수정</div>
+        <div className="pageHeaderMeta">{deals.length}건</div>
       </div>
 
       <SaveNotice saved={saved ?? trashed} error={error} />
@@ -151,10 +159,14 @@ export default async function ProjectsPage({
           columns={columns}
           rows={rows}
           returnPath={returnPath}
+          storageKey="projects"
+          canPaste={isOwner(user)}
           bulkActions={[
             { field: "folder_id", label: "폴더 이동", options: folderOptions },
             { field: "status", label: "상태 변경", options: statusOptions },
             { field: "project_type", label: "유형 변경", options: typeOptions },
+            { field: "primary_pl_person_id", label: "PL 지정", options: peopleOptions },
+            { field: "candidate_pm_person_id", label: "PM 지정", options: peopleOptions },
           ]}
           emptyText="표시할 프로젝트가 없습니다."
         />

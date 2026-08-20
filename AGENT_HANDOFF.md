@@ -127,11 +127,28 @@ components/                  # AppShell, NavLinks, DealTable, DocumentsPanel, Sa
 - 주 색상 `#1a3c2c` (링크/활성 네비/버튼만), 액센트 `#c8a45d` 최소 사용
 - 아이콘 없음, 상태 뱃지/알록달록 필 없음, 마케팅성 문구·불필요한 설명 문구 없음
 
+## 3.5 표(그리드) 사용법
+
+`components/BulkTable.tsx` 는 프로젝트·고객사·파트너·보드·이벤트 목록에서 공통으로 쓴다.
+
+- 헤더 경계를 끌면 열 너비가 바뀌고 브라우저에 기억된다. '열 너비 초기화' 로 되돌린다.
+- 셀 클릭 → 방향키/Tab 이동, Enter 또는 타이핑으로 편집, Esc 취소, Space 로 행 선택.
+- **엑셀에서 복사 → 셀 하나 고르고 ⌘V** 하면 그 지점부터 채워진다. 마스터 어드민 전용.
+  드롭다운 열은 표시 라벨(`진행 중`)도 저장값(`managed`)으로 알아서 바꿔 넣는다.
+- 저장은 낙관적이다. 화면이 먼저 바뀌고 실패하면 되돌아오며 셀 왼쪽에 빨간 줄이 생긴다.
+
+수정 가능한 필드는 `lib/bulk.ts` 의 `EDITABLE` / `PROFILE_EDITABLE` 화이트리스트가 전부다.
+열을 추가하려면 여기에 먼저 넣어야 한다.
+
 ## 4. Vercel 배포
 
 1. GitHub `xyzplusco/XPERP`에 push (`.env.local`, 루트 xlsx는 gitignore 확인).
-2. Vercel에서 리포 임포트, 환경변수 2개: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-   (`SUPABASE_DB_URL`은 로컬 마이그레이션 전용 — Vercel에 넣지 말 것)
+2. Vercel 환경변수 3개: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY`(서버 전용 — 계정 생성용, `NEXT_PUBLIC_` 붙이지 말 것).
+   (`SUPABASE_DB_URL`, `SUPABASE_ACCESS_TOKEN` 은 로컬 전용 — Vercel에 넣지 말 것)
+   값에 개행·따옴표가 섞이면 Supabase 가 `Invalid API key` 를 돌려준다. 삭제 후 재등록이 안전하다.
+2-1. **함수 리전은 도쿄(`hnd1`)** — `vercel.json` 에 고정되어 있다. Supabase 가 ap-northeast-1 이라
+   기본값 iad1(워싱턴 DC)로 두면 요청마다 태평양을 왕복해 페이지가 1초 이상 느려진다.
 3. 배포 전 §1 마이그레이션 + admin 계정 생성 필수.
 4. 도메인은 나중에 Vercel 대시보드에서 연결.
 

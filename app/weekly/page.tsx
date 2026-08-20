@@ -70,7 +70,7 @@ export default async function WeeklyPage({
           <div className="panel">
             <div className="panelHeader">
               <div className="panelTitle">{week.label} 작성</div>
-              <div className="panelMeta">비워두면 해당 주차 기록이 삭제됩니다</div>
+              
             </div>
 
             <div className="weeklyList">

@@ -56,7 +56,7 @@ export default async function TicketsPage({
           <div className="panelTitle">
             {scope === "unsorted" ? "프로젝트 미지정" : scope === "open" ? "진행 중" : "전체"}
           </div>
-          <div className="panelMeta">담당자·프로젝트·상태는 표에서 바로 바꿀 수 있습니다</div>
+          
         </div>
         <TicketTable
           tickets={tickets}

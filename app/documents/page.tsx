@@ -19,7 +19,7 @@ export default async function DocumentsPage() {
       <div className="panel">
         <div className="panelHeader">
           <div className="panelTitle">보관 문서</div>
-          <div className="panelMeta">업로드는 각 고객사 · 파트너 · 프로젝트 화면에서</div>
+          
         </div>
         <div className="tableWrap">
           <table>

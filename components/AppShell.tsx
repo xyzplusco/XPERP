@@ -5,13 +5,8 @@ import { signOutAction } from "@/lib/actions";
 import { ROLE_LABEL, type SessionUser } from "@/lib/auth";
 import { NavLinks } from "@/components/NavLinks";
 import { TicketDialog } from "@/components/TicketDialog";
-import { getAssignablePeople, getProjectOptions } from "@/lib/queries";
 
 export async function AppShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
-  const [assignables, projects] = user.appUserId
-    ? await Promise.all([getAssignablePeople(), getProjectOptions()])
-    : [[], []];
-
   return (
     <div className="appShell">
       <aside className="sidebar">
@@ -22,7 +17,7 @@ export async function AppShell({ user, children }: { user: SessionUser; children
           <NavLinks items={navigationFor(user)} />
         </nav>
         <div className="sidebarActions">
-          <TicketDialog assignables={assignables} projects={projects} />
+          <TicketDialog />
         </div>
         <div className="sidebarFooter">
           <div className="userEmail">{user.personName ?? user.email}</div>

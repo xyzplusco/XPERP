@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
-import { bulkTrashAction, bulkUpdateAction, inlineUpdateAction } from "@/lib/actions";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { bulkTrashAction, bulkUpdateAction, gridUpdateAction, inlineUpdateAction } from "@/lib/actions";
 
 export type ColumnDef = {
   key: string;
   header: string;
-  width?: string;
-  // readonly = 표시만, 나머지는 셀 클릭 시 인라인 수정
+  // 초기 열 너비(px). 사용자가 헤더 경계를 끌어 바꾸면 브라우저에 기억된다.
+  width?: number;
   kind?: "readonly" | "text" | "select" | "date" | "number";
   options?: [string, string][];
   numeric?: boolean;
@@ -16,13 +16,10 @@ export type ColumnDef = {
 
 export type BulkRow = {
   id: string;
-  // 표시값
   display: Record<string, string>;
-  // 수정 시 초기값 (DB 저장값)
   raw?: Record<string, string>;
   href?: string;
   linkKey?: string;
-  // 굵게 표시할 열 (부하 경고 등). 아이콘·색 없이 굵기로만 강조한다.
   emphasis?: string[];
 };
 
@@ -32,6 +29,11 @@ export type BulkAction = {
   options: [string, string][];
 };
 
+type Override = { display: string; raw: string };
+
+const MIN_WIDTH = 56;
+const DEFAULT_WIDTH = 130;
+
 export function BulkTable({
   entity,
   columns,
@@ -39,6 +41,8 @@ export function BulkTable({
   bulkActions = [],
   returnPath,
   emptyText = "표시할 항목이 없습니다.",
+  storageKey,
+  canPaste = false,
 }: {
   entity: string;
   columns: ColumnDef[];
@@ -46,36 +50,240 @@ export function BulkTable({
   bulkActions?: BulkAction[];
   returnPath: string;
   emptyText?: string;
+  storageKey?: string;
+  canPaste?: boolean;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [editing, setEditing] = useState<{ id: string; key: string } | null>(null);
-  const [flash, setFlash] = useState<{ id: string; key: string; text: string } | null>(null);
+  const [active, setActive] = useState<{ r: number; c: number } | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [overrides, setOverrides] = useState<Record<string, Record<string, Override>>>({});
+  const [failed, setFailed] = useState<Record<string, Set<string>>>({});
+  const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
   const [activeBulk, setActiveBulk] = useState(bulkActions[0]?.field ?? "");
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  const widthKey = `xp.cols.${storageKey ?? entity}`;
+  const [widths, setWidths] = useState<Record<string, number>>(() =>
+    Object.fromEntries(columns.map((c) => [c.key, c.width ?? DEFAULT_WIDTH]))
+  );
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(widthKey);
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as Record<string, number>;
+      setWidths((current) => {
+        const next = { ...current };
+        for (const column of columns) {
+          const value = parsed[column.key];
+          if (typeof value === "number" && value >= MIN_WIDTH) next[column.key] = value;
+        }
+        return next;
+      });
+    } catch {
+      // 저장된 값이 깨졌으면 기본값을 쓴다
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [widthKey]);
+
+  const persistWidths = (next: Record<string, number>) => {
+    try {
+      window.localStorage.setItem(widthKey, JSON.stringify(next));
+    } catch {
+      // 저장 실패는 무시 (동작에는 영향 없음)
+    }
+  };
+
+  const startResize = (key: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = widths[key] ?? DEFAULT_WIDTH;
+    let latest = startWidth;
+
+    const onMove = (move: MouseEvent) => {
+      latest = Math.max(MIN_WIDTH, startWidth + (move.clientX - startX));
+      setWidths((current) => ({ ...current, [key]: latest }));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setWidths((current) => {
+        const next = { ...current, [key]: latest };
+        persistWidths(next);
+        return next;
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  const resetWidths = () => {
+    const next = Object.fromEntries(columns.map((c) => [c.key, c.width ?? DEFAULT_WIDTH]));
+    setWidths(next);
+    persistWidths(next);
+  };
+
+  const valueOf = useCallback(
+    (row: BulkRow, column: ColumnDef) => {
+      const override = overrides[row.id]?.[column.key];
+      if (override) return override;
+      return {
+        display: row.display[column.key] ?? "",
+        raw: row.raw?.[column.key] ?? "",
+      };
+    },
+    [overrides]
+  );
+
+  const labelFor = (column: ColumnDef, raw: string) => {
+    if (!column.options) return raw;
+    return column.options.find(([value]) => value === raw)?.[1] ?? raw;
+  };
+
+  const rawFromPasted = (column: ColumnDef, text: string) => {
+    const trimmed = text.trim();
+    if (!column.options) return trimmed;
+    if (trimmed === "") return "";
+    const byValue = column.options.find(([value]) => value === trimmed);
+    if (byValue) return byValue[0];
+    const byLabel = column.options.find(([, display]) => display === trimmed);
+    return byLabel ? byLabel[0] : trimmed;
+  };
+
+  const applyOverride = (rowId: string, key: string, override: Override) => {
+    setOverrides((current) => ({ ...current, [rowId]: { ...current[rowId], [key]: override } }));
+  };
+
+  const markFailed = (rowId: string, key: string, isFailed: boolean) => {
+    setFailed((current) => {
+      const next = { ...current };
+      const set = new Set(next[rowId] ?? []);
+      if (isFailed) set.add(key);
+      else set.delete(key);
+      next[rowId] = set;
+      return next;
+    });
+  };
+
+  // 낙관적 저장: 화면은 즉시 바뀌고, 실패하면 되돌린다.
+  const save = (row: BulkRow, column: ColumnDef, nextRaw: string) => {
+    setEditing(false);
+    const before = valueOf(row, column);
+    if (nextRaw === before.raw) return;
+
+    applyOverride(row.id, column.key, { raw: nextRaw, display: labelFor(column, nextRaw) });
+    markFailed(row.id, column.key, false);
+
+    startTransition(async () => {
+      const result = await inlineUpdateAction(entity, row.id, column.key, nextRaw, returnPath);
+      if (!result.ok) {
+        applyOverride(row.id, column.key, before);
+        markFailed(row.id, column.key, true);
+        setMessage(result.message);
+      }
+    });
+  };
+
+  const editableColumns = columns.filter((c) => c.kind && c.kind !== "readonly");
+
+  const onPaste = (event: React.ClipboardEvent) => {
+    if (!canPaste || editing || !active) return;
+    const text = event.clipboardData.getData("text/plain");
+    if (!text || !text.includes("\t") && !text.includes("\n")) return;
+    event.preventDefault();
+
+    const matrix = text
+      .replace(/\r/g, "")
+      .split("\n")
+      .filter((line, index, all) => line !== "" || index < all.length - 1)
+      .map((line) => line.split("\t"));
+
+    const cells: { id: string; field: string; value: string }[] = [];
+    const revert: { id: string; key: string; before: Override }[] = [];
+
+    matrix.forEach((line, rowOffset) => {
+      const row = rows[active.r + rowOffset];
+      if (!row) return;
+      line.forEach((cellText, colOffset) => {
+        const column = columns[active.c + colOffset];
+        if (!column || !column.kind || column.kind === "readonly") return;
+        const nextRaw = rawFromPasted(column, cellText);
+        const before = valueOf(row, column);
+        if (nextRaw === before.raw) return;
+        revert.push({ id: row.id, key: column.key, before });
+        applyOverride(row.id, column.key, { raw: nextRaw, display: labelFor(column, nextRaw) });
+        cells.push({ id: row.id, field: column.key, value: nextRaw });
+      });
+    });
+
+    if (cells.length === 0) return;
+    setMessage(`${cells.length}칸 반영 중`);
+
+    startTransition(async () => {
+      const result = await gridUpdateAction(entity, cells);
+      const failures = result.results.filter((r) => !r.ok);
+      for (const failure of failures) {
+        const original = revert.find((v) => v.id === failure.id && v.key === failure.field);
+        if (original) applyOverride(failure.id, failure.field, original.before);
+        markFailed(failure.id, failure.field, true);
+      }
+      setMessage(
+        failures.length === 0
+          ? `${cells.length}칸 저장됨`
+          : `${cells.length - failures.length}칸 저장 · ${failures.length}칸 실패 — ${failures[0].message}`
+      );
+    });
+  };
+
+  const move = (dr: number, dc: number) => {
+    setActive((current) => {
+      if (!current) return { r: 0, c: 0 };
+      return {
+        r: Math.min(rows.length - 1, Math.max(0, current.r + dr)),
+        c: Math.min(columns.length - 1, Math.max(0, current.c + dc)),
+      };
+    });
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (editing || !active) return;
+    const column = columns[active.c];
+    const canEditCell = Boolean(column?.kind && column.kind !== "readonly");
+
+    if (event.key === "ArrowDown") { event.preventDefault(); move(1, 0); return; }
+    if (event.key === "ArrowUp") { event.preventDefault(); move(-1, 0); return; }
+    if (event.key === "ArrowRight") { event.preventDefault(); move(0, 1); return; }
+    if (event.key === "ArrowLeft") { event.preventDefault(); move(0, -1); return; }
+    if (event.key === "Tab") { event.preventDefault(); move(0, event.shiftKey ? -1 : 1); return; }
+    if (event.key === "Enter" && canEditCell) { event.preventDefault(); setEditing(true); return; }
+    if (event.key === " ") {
+      event.preventDefault();
+      const row = rows[active.r];
+      if (row) toggle(row.id);
+      return;
+    }
+    if (canEditCell && event.key.length === 1 && !event.metaKey && !event.ctrlKey) {
+      setEditing(true);
+    }
+  };
 
   const toggle = (id: string) => {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelected(next);
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const toggleAll = () =>
     setSelected(selected.size === rows.length ? new Set() : new Set(rows.map((r) => r.id)));
 
-  const save = (row: BulkRow, column: ColumnDef, value: string) => {
-    setEditing(null);
-    const before = row.raw?.[column.key] ?? row.display[column.key] ?? "";
-    if (value === before) return;
-    startTransition(async () => {
-      const result = await inlineUpdateAction(entity, row.id, column.key, value, returnPath);
-      setFlash({ id: row.id, key: column.key, text: result.ok ? "저장됨" : result.message });
-      setTimeout(() => setFlash(null), 2500);
-    });
-  };
-
-  const selectedRows = rows.filter((r) => selected.has(r.id));
+  const selectedRows = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected]);
   const currentAction = bulkActions.find((a) => a.field === activeBulk);
+  const totalWidth = columns.reduce((sum, c) => sum + (widths[c.key] ?? DEFAULT_WIDTH), 0) + 34;
 
   return (
     <>
@@ -90,11 +298,7 @@ export function BulkTable({
               {selectedRows.map((row) => (
                 <input key={row.id} type="hidden" name="id" value={row.id} />
               ))}
-              <select
-                name="field"
-                value={activeBulk}
-                onChange={(event) => setActiveBulk(event.target.value)}
-              >
+              <select name="field" value={activeBulk} onChange={(event) => setActiveBulk(event.target.value)}>
                 {bulkActions.map((action) => (
                   <option key={action.field} value={action.field}>
                     {action.label}
@@ -132,11 +336,30 @@ export function BulkTable({
         </div>
       ) : null}
 
-      <div className="tableWrap">
-        <table>
+      <div className="gridBar">
+        <button className="smallButton" type="button" onClick={resetWidths}>
+          열 너비 초기화
+        </button>
+        {message ? <span className="gridMessage">{message}</span> : null}
+      </div>
+
+      <div
+        className="tableWrap gridWrap"
+        ref={gridRef}
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+      >
+        <table className="gridTable" style={{ width: totalWidth, minWidth: "100%" }}>
+          <colgroup>
+            <col style={{ width: 34 }} />
+            {columns.map((column) => (
+              <col key={column.key} style={{ width: widths[column.key] ?? DEFAULT_WIDTH }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
-              <th className="checkCell" style={{ width: 34 }}>
+              <th className="checkCell">
                 <input
                   type="checkbox"
                   checked={rows.length > 0 && selected.size === rows.length}
@@ -144,12 +367,9 @@ export function BulkTable({
                 />
               </th>
               {columns.map((column) => (
-                <th
-                  key={column.key}
-                  style={column.width ? { width: column.width } : undefined}
-                  className={column.numeric ? "numeric" : undefined}
-                >
+                <th key={column.key} className={column.numeric ? "numeric" : undefined}>
                   {column.header}
+                  <span className="colResizer" onMouseDown={(event) => startResize(column.key, event)} />
                 </th>
               ))}
             </tr>
@@ -162,32 +382,42 @@ export function BulkTable({
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr key={row.id} style={pending && selected.has(row.id) ? { opacity: 0.7 } : undefined}>
+              rows.map((row, rowIndex) => (
+                <tr key={row.id} style={pending && selected.has(row.id) ? { opacity: 0.75 } : undefined}>
                   <td className="checkCell">
                     <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
                   </td>
-                  {columns.map((column) => {
-                    const isEditing = editing?.id === row.id && editing.key === column.key;
-                    const flashing = flash?.id === row.id && flash.key === column.key;
-                    const value = row.raw?.[column.key] ?? "";
-                    const shown = row.display[column.key] ?? "";
+                  {columns.map((column, colIndex) => {
+                    const cell = valueOf(row, column);
+                    const isActive = active?.r === rowIndex && active?.c === colIndex;
+                    const isEditing = isActive && editing;
+                    const canEditCell = Boolean(column.kind && column.kind !== "readonly");
+                    const isFailed = failed[row.id]?.has(column.key);
 
-                    if (isEditing && column.kind && column.kind !== "readonly") {
+                    const classes = [
+                      column.numeric ? "numeric" : "",
+                      isActive ? "cellActive" : "",
+                      canEditCell ? "cellEditable" : "",
+                      isFailed ? "cellFailed" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
+
+                    if (isEditing) {
                       return (
-                        <td key={column.key}>
+                        <td key={column.key} className={classes}>
                           {column.kind === "select" ? (
                             <select
                               autoFocus
-                              defaultValue={value}
+                              defaultValue={cell.raw}
                               onBlur={(event) => save(row, column, event.target.value)}
                               onChange={(event) => save(row, column, event.target.value)}
                               className="cellInput"
                             >
                               <option value="">—</option>
-                              {(column.options ?? []).map(([v, d]) => (
-                                <option key={v} value={v}>
-                                  {d}
+                              {(column.options ?? []).map(([value, display]) => (
+                                <option key={value} value={value}>
+                                  {display}
                                 </option>
                               ))}
                             </select>
@@ -196,12 +426,25 @@ export function BulkTable({
                               autoFocus
                               type={column.kind === "date" ? "date" : "text"}
                               inputMode={column.kind === "number" ? "numeric" : undefined}
-                              defaultValue={value}
+                              defaultValue={cell.raw}
                               className="cellInput"
                               onBlur={(event) => save(row, column, event.target.value)}
                               onKeyDown={(event) => {
-                                if (event.key === "Enter") save(row, column, event.currentTarget.value);
-                                if (event.key === "Escape") setEditing(null);
+                                if (event.key === "Enter") {
+                                  save(row, column, event.currentTarget.value);
+                                  move(1, 0);
+                                  gridRef.current?.focus();
+                                }
+                                if (event.key === "Tab") {
+                                  event.preventDefault();
+                                  save(row, column, event.currentTarget.value);
+                                  move(0, event.shiftKey ? -1 : 1);
+                                  gridRef.current?.focus();
+                                }
+                                if (event.key === "Escape") {
+                                  setEditing(false);
+                                  gridRef.current?.focus();
+                                }
                               }}
                             />
                           )}
@@ -212,30 +455,28 @@ export function BulkTable({
                     return (
                       <td
                         key={column.key}
-                        className={column.numeric ? "numeric" : undefined}
-                        onDoubleClick={() =>
-                          column.kind && column.kind !== "readonly"
-                            ? setEditing({ id: row.id, key: column.key })
-                            : undefined
-                        }
-                        title={column.kind && column.kind !== "readonly" ? "더블클릭하면 수정" : undefined}
-                        style={
-                          column.kind && column.kind !== "readonly" ? { cursor: "cell" } : undefined
-                        }
+                        className={classes}
+                        onMouseDown={() => {
+                          setActive({ r: rowIndex, c: colIndex });
+                          setEditing(false);
+                          gridRef.current?.focus();
+                        }}
+                        onDoubleClick={() => {
+                          if (canEditCell) setEditing(true);
+                        }}
                       >
                         {row.href && row.linkKey === column.key ? (
                           <Link className="tableLink" href={row.href}>
-                            {shown || "–"}
+                            {cell.display || "–"}
                           </Link>
                         ) : (
                           <span
-                            className={shown ? undefined : "faintText"}
+                            className={cell.display ? undefined : "faintText"}
                             style={row.emphasis?.includes(column.key) ? { fontWeight: 700 } : undefined}
                           >
-                            {shown || "–"}
+                            {cell.display || "–"}
                           </span>
                         )}
-                        {flashing ? <span className="cellFlash">{flash.text}</span> : null}
                       </td>
                     );
                   })}

@@ -2,18 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { createTicketAction } from "@/lib/actions";
+import { createTicketAction, getTicketOptionsAction } from "@/lib/actions";
 
 type Assignable = { id: string; name_ko: string; hint: string };
 type ProjectOption = { id: string; name: string; company: string | null; folder: string | null };
 
-export function TicketDialog({
-  assignables,
-  projects,
-}: {
-  assignables: Assignable[];
-  projects: ProjectOption[];
-}) {
+// 담당자·프로젝트 목록은 티켓 창을 처음 열 때만 가져온다.
+// 사이드바에 있다는 이유로 모든 페이지에서 미리 조회하면 전 페이지가 그만큼 느려진다.
+export function TicketDialog() {
+  const [assignables, setAssignables] = useState<Assignable[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   const [assignee, setAssignee] = useState("");
   const [projectQuery, setProjectQuery] = useState("");
@@ -22,8 +21,20 @@ export function TicketDialog({
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) titleRef.current?.focus();
-  }, [open]);
+    if (!open) return;
+    titleRef.current?.focus();
+    if (loaded) return;
+    let alive = true;
+    void getTicketOptionsAction().then((data) => {
+      if (!alive) return;
+      setAssignables(data.assignables);
+      setProjects(data.projects);
+      setLoaded(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [open, loaded]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -88,9 +99,7 @@ export function TicketDialog({
                       {person.name_ko}
                     </button>
                   ))}
-                  {assignables.length === 0 ? (
-                    <span className="faintText">지정 가능한 담당자가 없습니다. 설정에서 계정을 파트너와 연결하세요.</span>
-                  ) : null}
+                  {loaded && assignables.length === 0 ? <span className="faintText">없음</span> : null}
                 </div>
               </div>
 

@@ -1,6 +1,7 @@
 import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable";
 import { SaveNotice } from "@/components/SaveNotice";
 import { getCustomers } from "@/lib/queries";
+import { getSessionUser, isOwner } from "@/lib/auth";
 import { label } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -11,18 +12,18 @@ export default async function CustomersPage({
   searchParams: Promise<{ saved?: string; trashed?: string; error?: string }>;
 }) {
   const { saved, trashed, error } = await searchParams;
-  const customers = await getCustomers();
+  const [user, customers] = await Promise.all([getSessionUser(), getCustomers()]);
 
   const columns: ColumnDef[] = [
-    { key: "customer_id", header: "ID", width: "9%", kind: "readonly" },
-    { key: "name_ko", header: "고객사", width: "18%", kind: "text" },
-    { key: "industry", header: "산업", width: "13%", kind: "text" },
-    { key: "project_count", header: "프로젝트", width: "7%", kind: "readonly", numeric: true },
-    { key: "active_project_count", header: "진행", width: "7%", kind: "readonly", numeric: true },
-    { key: "document_gap_count", header: "문서 미비", width: "8%", kind: "readonly", numeric: true },
-    { key: "task_count", header: "액션", width: "6%", kind: "readonly", numeric: true },
-    { key: "latest_status", header: "상태", width: "9%", kind: "readonly" },
-    { key: "next_action", header: "다음 액션", kind: "text" },
+    { key: "customer_id", header: "ID", width: 90, kind: "readonly" },
+    { key: "name_ko", header: "고객사", width: 180, kind: "text" },
+    { key: "industry", header: "산업", width: 130, kind: "text" },
+    { key: "project_count", header: "프로젝트", width: 80, kind: "readonly", numeric: true },
+    { key: "active_project_count", header: "진행", width: 70, kind: "readonly", numeric: true },
+    { key: "document_gap_count", header: "문서 미비", width: 90, kind: "readonly", numeric: true },
+    { key: "task_count", header: "액션", width: 70, kind: "readonly", numeric: true },
+    { key: "latest_status", header: "상태", width: 120, kind: "readonly" },
+    { key: "next_action", header: "다음 액션", width: 320, kind: "text" },
   ];
 
   const rows: BulkRow[] = customers.map((row) => ({
@@ -51,13 +52,15 @@ export default async function CustomersPage({
     <>
       <div className="pageHeader">
         <h1>고객사</h1>
-        <div className="pageHeaderMeta">{customers.length}개사 · 셀을 더블클릭하면 바로 수정</div>
+        <div className="pageHeaderMeta">{customers.length}개사</div>
       </div>
 
       <SaveNotice saved={saved ?? trashed} error={error} />
 
       <div className="panel">
         <BulkTable
+          storageKey="customers"
+          canPaste={isOwner(user)}
           entity="companies"
           columns={columns}
           rows={rows}

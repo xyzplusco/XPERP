@@ -44,6 +44,8 @@ export const EDITABLE: Record<EntityKey, Record<string, FieldSpec>> = {
     start_date: { date: true },
     end_date: { date: true },
     next_action: { text: true },
+    primary_pl_person_id: { ref: true },
+    candidate_pm_person_id: { ref: true },
   },
   events: {
     name: { text: true },

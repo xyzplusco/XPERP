@@ -125,7 +125,7 @@ export function InviteeManager({
         <div className="panelHeader">
           <div className="panelTitle">참석자</div>
           <div className="panelMeta">
-            {selected.size > 0 ? `${selected.size}명 선택됨` : "행을 선택하면 선택한 사람만 복사됩니다"}
+            {selected.size > 0 ? `${selected.size}명 선택됨` : ""}
           </div>
         </div>
 
@@ -173,7 +173,7 @@ export function InviteeManager({
           {showPaste ? (
             <form action={addInviteesAction.bind(null, eventId)} style={{ marginTop: 12 }}>
               <div className="field">
-                <label>엑셀에서 복사해 붙여넣으세요 — 한 줄에 한 명</label>
+                <label>명단 붙여넣기</label>
                 <textarea
                   name="bulk"
                   rows={6}
@@ -181,8 +181,7 @@ export function InviteeManager({
                   placeholder={"홍길동\t그룹엑스\t대표\thong@example.com\t010-1234-5678\n김철수, 터미널즈, 팀장, kim@example.com, 010-2222-3333"}
                 />
                 <span className="faintText" style={{ fontSize: 12 }}>
-                  이름 / 회사 / 직함 / 이메일 / 전화 순. 탭·콤마 모두 인식하고, 뒤쪽은 비어도 됩니다.
-                  이름이 파트너 DB와 정확히 일치하면 자동으로 연결됩니다.
+                  이름 · 회사 · 직함 · 이메일 · 전화
                 </span>
               </div>
               <div className="formActions">
@@ -223,7 +222,7 @@ export function InviteeManager({
               {invitees.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="emptyCell">
-                    참석자가 없습니다. 위 &lsquo;명단 붙여넣기&rsquo;로 한 번에 추가하세요.
+                    참석자가 없습니다.
                   </td>
                 </tr>
               ) : (

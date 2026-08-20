@@ -1165,3 +1165,44 @@ export async function getPartnerBoard(): Promise<PartnerBoardRow[]> {
     .filter((row) => row.evidence.length > 0)
     .sort((a, b) => b.projectCount - a.projectCount || a.name.localeCompare(b.name, "ko"));
 }
+
+// PL/PM 으로 지정할 수 있는 사람 — 구분이나 네트워크 분류가 잡힌 사람 + 이미 배정된 사람.
+export async function getPersonOptions(): Promise<[string, string][]> {
+  const supabase = await createSupabaseServer();
+  const [profileRes, projectRes] = await Promise.all([
+    supabase
+      .from("network_profiles")
+      .select("person_id, partner_status, network_segment, person:people!network_profiles_person_id_fkey(id, name_ko)")
+      .limit(2000),
+    supabase
+      .from("projects")
+      .select(
+        "primary_pl:people!projects_primary_pl_person_id_fkey(id, name_ko), " +
+          "secondary_pl:people!projects_secondary_pl_person_id_fkey(id, name_ko), " +
+          "pm:people!projects_candidate_pm_person_id_fkey(id, name_ko)"
+      )
+      .is("deleted_at", null)
+      .limit(1000),
+  ]);
+
+  const map = new Map<string, string>();
+  const add = (person: { id: string; name_ko: string } | null) => {
+    if (person?.id && !map.has(person.id)) map.set(person.id, person.name_ko);
+  };
+
+  for (const row of (profileRes.data ?? []) as unknown as Record<string, unknown>[]) {
+    const labelled = Boolean((row.partner_status as string)?.trim());
+    const segmented = (row.network_segment as string) !== "unknown";
+    if (!labelled && !segmented) continue;
+    add(one(row.person as { id: string; name_ko: string }));
+  }
+  for (const row of (projectRes.data ?? []) as unknown as Record<string, unknown>[]) {
+    add(one(row.primary_pl as { id: string; name_ko: string }));
+    add(one(row.secondary_pl as { id: string; name_ko: string }));
+    add(one(row.pm as { id: string; name_ko: string }));
+  }
+
+  return Array.from(map.entries())
+    .map(([id, name]) => [id, name] as [string, string])
+    .sort((a, b) => a[1].localeCompare(b[1], "ko"));
+}

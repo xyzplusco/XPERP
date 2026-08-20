@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable";
 import { SaveNotice } from "@/components/SaveNotice";
 import { getPartnerBoard, type PartnerBoardRow } from "@/lib/queries";
+import { getSessionUser, isOwner } from "@/lib/auth";
 import { PARTNER_CLASS_OPTIONS, partnerClass } from "@/lib/labels";
 import { daysSince } from "@/lib/week";
 
@@ -54,7 +55,7 @@ export default async function PartnerBoardPage({
   const { view: viewParam, saved, trashed, error } = await searchParams;
   const view: View = VIEWS.includes(viewParam as View) ? (viewParam as View) : "all";
 
-  const all = await getPartnerBoard();
+  const [user, all] = await Promise.all([getSessionUser(), getPartnerBoard()]);
 
   const counts = {
     all: all.length,
@@ -81,15 +82,15 @@ export default async function PartnerBoardPage({
   const classOptions: [string, string][] = PARTNER_CLASS_OPTIONS.map((v) => [v, v]);
 
   const columns: ColumnDef[] = [
-    { key: "name", header: "이름", width: "11%", kind: "readonly" },
-    { key: "partner_status", header: "구분", width: "10%", kind: "select", options: classOptions },
-    { key: "company", header: "소속", width: "14%", kind: "readonly" },
-    { key: "projects", header: "참여 프로젝트", width: "16%", kind: "readonly" },
-    { key: "roles", header: "역할", width: "7%", kind: "readonly" },
-    { key: "nda_status", header: "NDA", width: "7%", kind: "select", options: DOC_STATE_OPTIONS },
-    { key: "profile_status", header: "프로필", width: "7%", kind: "select", options: DOC_STATE_OPTIONS },
-    { key: "appointment_status", header: "위촉", width: "7%", kind: "select", options: DOC_STATE_OPTIONS },
-    { key: "last", header: "최근 활동", width: "11%", kind: "readonly" },
+    { key: "name", header: "이름", width: 110, kind: "readonly" },
+    { key: "partner_status", header: "구분", width: 110, kind: "select", options: classOptions },
+    { key: "company", header: "소속", width: 150, kind: "readonly" },
+    { key: "projects", header: "참여 프로젝트", width: 160, kind: "readonly" },
+    { key: "roles", header: "역할", width: 90, kind: "readonly" },
+    { key: "nda_status", header: "NDA", width: 80, kind: "select", options: DOC_STATE_OPTIONS },
+    { key: "profile_status", header: "프로필", width: 80, kind: "select", options: DOC_STATE_OPTIONS },
+    { key: "appointment_status", header: "위촉", width: 80, kind: "select", options: DOC_STATE_OPTIONS },
+    { key: "last", header: "최근 활동", width: 120, kind: "readonly" },
   ];
 
   const rows: BulkRow[] = rowsData.map((row) => {
@@ -141,7 +142,7 @@ export default async function PartnerBoardPage({
       <div className="pageHeader">
         <h1>파트너 관리 보드</h1>
         <div className="pageHeaderMeta">
-          활동 파트너 {counts.all}명 · 셀을 더블클릭하면 바로 수정
+          활동 파트너 {counts.all}명
         </div>
       </div>
 
@@ -199,6 +200,8 @@ export default async function PartnerBoardPage({
 
       <div className="panel">
         <BulkTable
+          storageKey="partner-board"
+          canPaste={isOwner(user)}
           entity="people"
           columns={columns}
           rows={rows}

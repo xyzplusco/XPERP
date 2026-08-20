@@ -22,6 +22,8 @@ export function SaveNotice({
     owner: "마스터 어드민은 이 화면에서 만들거나 바꿀 수 없습니다.",
     self: "본인 계정은 삭제할 수 없습니다.",
     nokey: "SUPABASE_SERVICE_ROLE_KEY 가 설정되지 않아 계정을 만들 수 없습니다.",
+    weak: "비밀번호는 8자 이상이어야 합니다.",
+    mismatch: "두 비밀번호가 다릅니다.",
   };
   return (
     <p className="notice noticeError">

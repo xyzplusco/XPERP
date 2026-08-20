@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { canSeeRevenue, getSessionUser, isAdmin, isOwner } from "@/lib/auth";
 import { createSupabaseAdmin, generatePassword } from "@/lib/supabase/admin";
+import { getAssignablePeople, getProjectOptions } from "@/lib/queries";
 import {
   EDITABLE,
   ENTITY_PATH,
@@ -710,7 +711,9 @@ export async function inlineUpdateAction(
     if (error) return { ok: false, message: error.message };
   }
 
-  revalidatePath(returnPath);
+  // 화면은 클라이언트가 낙관적으로 이미 갱신했다.
+  // 여기서 revalidatePath 를 하면 셀 하나 고칠 때마다 페이지 전체가 다시 그려져 눈에 띄게 느려진다.
+  void returnPath;
   return { ok: true, message: "저장됨" };
 }
 
@@ -1117,4 +1120,90 @@ export async function createPersonAndInviteAction(
   }
   revalidatePath(`/events/${eventId}`);
   return { ok: true, message: `${name} 신규 등록 후 추가됨` };
+}
+
+// 티켓 창을 열 때만 담당자·프로젝트 목록을 가져온다 (사이드바 때문에 전 페이지가 느려지지 않도록).
+export async function getTicketOptionsAction() {
+  const user = await getSessionUser();
+  if (!user?.appUserId) return { assignables: [], projects: [] };
+  const [assignables, projects] = await Promise.all([getAssignablePeople(), getProjectOptions()]);
+  return { assignables, projects };
+}
+
+// 엑셀에서 복사한 표를 그대로 붙여넣어 여러 칸을 한 번에 고친다. 마스터 어드민 전용.
+export async function gridUpdateAction(
+  entity: string,
+  cells: { id: string; field: string; value: string }[]
+): Promise<{ ok: boolean; results: { id: string; field: string; ok: boolean; message: string }[] }> {
+  const results: { id: string; field: string; ok: boolean; message: string }[] = [];
+  const reject = (message: string) => ({
+    ok: false,
+    results: cells.map((cell) => ({ id: cell.id, field: cell.field, ok: false, message })),
+  });
+
+  if (!isValidEntity(entity)) return reject("잘못된 대상입니다.");
+  if (cells.length === 0) return { ok: true, results };
+  if (cells.length > 2000) return reject("한 번에 2000칸까지 붙여넣을 수 있습니다.");
+
+  const user = await getSessionUser();
+  if (!isOwner(user)) return reject("마스터 어드민만 붙여넣기로 수정할 수 있습니다.");
+
+  const supabase = await createSupabaseServer();
+
+  // 같은 (필드, 값) 끼리 묶어 왕복 횟수를 줄인다.
+  const groups = new Map<string, { field: string; value: string | number | null; ids: string[]; profile: boolean }>();
+
+  for (const cell of cells) {
+    const isProfileField = entity === "people" && cell.field in PROFILE_EDITABLE;
+    const spec = isProfileField ? PROFILE_EDITABLE[cell.field] : EDITABLE[entity as EntityKey][cell.field];
+    const validated = validateField(spec, cell.value);
+    if (!validated.ok) {
+      results.push({ id: cell.id, field: cell.field, ok: false, message: validated.reason });
+      continue;
+    }
+    const key = `${isProfileField ? "p" : "e"}|${cell.field}|${String(validated.value)}`;
+    const group = groups.get(key) ?? { field: cell.field, value: validated.value, ids: [], profile: isProfileField };
+    group.ids.push(cell.id);
+    groups.set(key, group);
+  }
+
+  for (const group of groups.values()) {
+    const { error } = group.profile
+      ? await supabase.from("network_profiles").upsert(
+          group.ids.map((personId) => ({
+            person_id: personId,
+            network_segment: "unknown",
+            [group.field]: group.value,
+          })),
+          { onConflict: "person_id" }
+        )
+      : await supabase.from(entity).update({ [group.field]: group.value }).in("id", group.ids);
+
+    for (const id of group.ids) {
+      results.push({
+        id,
+        field: group.field,
+        ok: !error,
+        message: error ? error.message : "저장됨",
+      });
+    }
+  }
+
+  return { ok: results.every((r) => r.ok), results };
+}
+
+// 본인 비밀번호 변경.
+export async function changePasswordAction(formData: FormData) {
+  const next = formData.get("password");
+  const confirm = formData.get("password_confirm");
+  if (typeof next !== "string" || next.length < 8) redirect("/settings?error=weak");
+  if (next !== confirm) redirect("/settings?error=mismatch");
+
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase.auth.updateUser({ password: next });
+  if (error) {
+    console.error("changePasswordAction", error.message);
+    redirect(`/settings?error=save&reason=${encodeURIComponent(error.message.slice(0, 300))}`);
+  }
+  redirect("/settings?saved=1");
 }

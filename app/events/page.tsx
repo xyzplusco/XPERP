@@ -2,6 +2,7 @@ import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable"
 import { SaveNotice } from "@/components/SaveNotice";
 import { createEventAction } from "@/lib/actions";
 import { getEvents } from "@/lib/queries";
+import { getSessionUser, isOwner } from "@/lib/auth";
 import { EVENT_STATUS_OPTIONS, formatDateTime, label } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -12,19 +13,19 @@ export default async function EventsPage({
   searchParams: Promise<{ saved?: string; trashed?: string; error?: string }>;
 }) {
   const { saved, trashed, error } = await searchParams;
-  const events = await getEvents();
+  const [user, events] = await Promise.all([getSessionUser(), getEvents()]);
 
   const statusOptions: [string, string][] = EVENT_STATUS_OPTIONS.map((v) => [v, label(v)]);
 
   const columns: ColumnDef[] = [
-    { key: "name", header: "이벤트", width: "28%", kind: "text" },
-    { key: "event_type", header: "유형", width: "13%", kind: "text" },
-    { key: "status", header: "상태", width: "10%", kind: "select", options: statusOptions },
-    { key: "starts_at", header: "일시", width: "13%", kind: "readonly" },
-    { key: "location", header: "장소", width: "13%", kind: "text" },
-    { key: "invitee_count", header: "초대", width: "7%", kind: "readonly", numeric: true },
-    { key: "confirmed_count", header: "참가확정", width: "8%", kind: "readonly", numeric: true },
-    { key: "next_action", header: "다음 액션", kind: "text" },
+    { key: "name", header: "이벤트", width: 260, kind: "text" },
+    { key: "event_type", header: "유형", width: 130, kind: "text" },
+    { key: "status", header: "상태", width: 100, kind: "select", options: statusOptions },
+    { key: "starts_at", header: "일시", width: 150, kind: "readonly" },
+    { key: "location", header: "장소", width: 140, kind: "text" },
+    { key: "invitee_count", header: "초대", width: 70, kind: "readonly", numeric: true },
+    { key: "confirmed_count", header: "참가확정", width: 90, kind: "readonly", numeric: true },
+    { key: "next_action", header: "다음 액션", width: 320, kind: "text" },
   ];
 
   const rows: BulkRow[] = events.map((event) => {
@@ -57,13 +58,15 @@ export default async function EventsPage({
     <>
       <div className="pageHeader">
         <h1>이벤트</h1>
-        <div className="pageHeaderMeta">{events.length}건 · 셀을 더블클릭하면 바로 수정</div>
+        <div className="pageHeaderMeta">{events.length}건</div>
       </div>
 
       <SaveNotice saved={saved ?? trashed} error={error} />
 
       <div className="panel">
         <BulkTable
+          storageKey="events"
+          canPaste={isOwner(user)}
           entity="events"
           columns={columns}
           rows={rows}

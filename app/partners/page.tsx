@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable";
 import { SaveNotice } from "@/components/SaveNotice";
 import { getPartners } from "@/lib/queries";
+import { getSessionUser, isOwner } from "@/lib/auth";
 import { label, PARTNER_CLASS_OPTIONS, partnerClass } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ export default async function PartnersPage({
   searchParams: Promise<{ class?: string; saved?: string; trashed?: string; error?: string }>;
 }) {
   const { class: classFilter, saved, trashed, error } = await searchParams;
-  const partners = await getPartners();
+  const [user, partners] = await Promise.all([getSessionUser(), getPartners()]);
 
   const withClass = partners.map((person) => ({
     ...person,
@@ -50,15 +51,15 @@ export default async function PartnersPage({
   const classOptions: [string, string][] = PARTNER_CLASS_OPTIONS.map((v) => [v, v]);
 
   const columns: ColumnDef[] = [
-    { key: "name_ko", header: "이름", width: "12%", kind: "text" },
-    { key: "partner_status", header: "구분", width: "11%", kind: "select", options: classOptions },
-    { key: "company", header: "소속", width: "14%", kind: "readonly" },
-    { key: "title", header: "직함", width: "11%", kind: "text" },
-    { key: "email", header: "이메일", width: "18%", kind: "text" },
-    { key: "phone", header: "연락처", width: "11%", kind: "text" },
-    { key: "nda_status", header: "NDA", width: "7%", kind: "select", options: DOC_STATE_OPTIONS },
-    { key: "profile_status", header: "프로필", width: "7%", kind: "select", options: DOC_STATE_OPTIONS },
-    { key: "appointment_status", header: "위촉", width: "7%", kind: "select", options: DOC_STATE_OPTIONS },
+    { key: "name_ko", header: "이름", width: 110, kind: "text" },
+    { key: "partner_status", header: "구분", width: 110, kind: "select", options: classOptions },
+    { key: "company", header: "소속", width: 150, kind: "readonly" },
+    { key: "title", header: "직함", width: 110, kind: "text" },
+    { key: "email", header: "이메일", width: 200, kind: "text" },
+    { key: "phone", header: "연락처", width: 120, kind: "text" },
+    { key: "nda_status", header: "NDA", width: 80, kind: "select", options: DOC_STATE_OPTIONS },
+    { key: "profile_status", header: "프로필", width: 80, kind: "select", options: DOC_STATE_OPTIONS },
+    { key: "appointment_status", header: "위촉", width: 80, kind: "select", options: DOC_STATE_OPTIONS },
   ];
 
   const rows: BulkRow[] = filtered.map((person) => ({
@@ -98,7 +99,7 @@ export default async function PartnersPage({
         <h1>파트너</h1>
         <div className="pageHeaderMeta">
           {classFilter ? `${classFilter} ${filtered.length}명 / 전체 ${withClass.length}명` : `${withClass.length}명`}
-          {" · 셀을 더블클릭하면 바로 수정"}
+
         </div>
       </div>
 
@@ -131,6 +132,8 @@ export default async function PartnersPage({
 
       <div className="panel">
         <BulkTable
+          storageKey="partners"
+          canPaste={isOwner(user)}
           entity="people"
           columns={columns}
           rows={rows}

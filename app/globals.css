@@ -1094,3 +1094,65 @@ th.numeric {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   word-break: break-all;
 }
+
+/* 표(그리드) — 열 너비 조절 · 셀 이동 · 붙여넣기 */
+.gridBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.gridMessage {
+  font-size: 12px;
+  color: var(--green);
+}
+
+.gridWrap {
+  outline: none;
+}
+
+.gridTable {
+  table-layout: fixed;
+}
+
+.gridTable th {
+  position: relative;
+  user-select: none;
+}
+
+.gridTable td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gridTable td.cellActive {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+  overflow: visible;
+  white-space: normal;
+}
+
+.gridTable td.cellEditable {
+  cursor: cell;
+}
+
+.gridTable td.cellFailed {
+  box-shadow: inset 3px 0 0 #b3261e;
+}
+
+.colResizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.colResizer:hover {
+  background: var(--line-strong);
+}

@@ -1084,3 +1084,13 @@ th.numeric {
 .lookupForm {
   margin-top: 12px;
 }
+
+/* 실패 사유 원문 (Supabase 가 돌려준 메시지) */
+.noticeReason {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}

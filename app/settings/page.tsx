@@ -24,10 +24,10 @@ export default async function SettingsPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    saved?: string; error?: string; created?: string; password?: string; reset?: string;
+    saved?: string; error?: string; reason?: string; created?: string; password?: string; reset?: string;
   }>;
 }) {
-  const { saved, error, created, password, reset } = await searchParams;
+  const { saved, error, reason, created, password, reset } = await searchParams;
   const user = await getSessionUser();
   const owner = isOwner(user);
   const keyReady = isAccountAdminReady();
@@ -43,7 +43,7 @@ export default async function SettingsPage({
         <div className="pageHeaderMeta">{owner ? `계정 ${users.length}개` : ""}</div>
       </div>
 
-      <SaveNotice saved={saved} error={error} />
+      <SaveNotice saved={saved} error={error} reason={reason} />
 
       {created && password ? (
         <div className="panel">

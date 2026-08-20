@@ -937,8 +937,10 @@ export async function createAccountAction(formData: FormData) {
     email_confirm: true,
   });
   if (authError || !created?.user) {
-    console.error("createAccountAction auth", authError?.message);
-    redirect(`/settings?error=${authError?.message?.includes("already") ? "exists" : "save"}`);
+    const message = authError?.message ?? "Auth 사용자를 만들지 못했습니다";
+    console.error("createAccountAction auth", message);
+    if (/already/i.test(message)) redirect("/settings?error=exists");
+    redirect(`/settings?error=save&reason=${encodeURIComponent(message.slice(0, 300))}`);
   }
 
   const { error: rowError } = await admin.from("users").insert({
@@ -952,7 +954,7 @@ export async function createAccountAction(formData: FormData) {
     // 계정 행 생성이 실패하면 Auth 사용자도 되돌린다 (고아 계정 방지)
     await admin.auth.admin.deleteUser(created.user.id);
     console.error("createAccountAction row", rowError.message);
-    redirect("/settings?error=save");
+    redirect(`/settings?error=save&reason=${encodeURIComponent(rowError.message.slice(0, 300))}`);
   }
 
   revalidatePath("/settings");
@@ -973,7 +975,7 @@ export async function resetPasswordAction(userId: string) {
   const { error } = await admin.auth.admin.updateUserById(row.auth_user_id as string, { password });
   if (error) {
     console.error("resetPasswordAction", error.message);
-    redirect("/settings?error=save");
+    redirect(`/settings?error=save&reason=${encodeURIComponent(error.message.slice(0, 300))}`);
   }
 
   revalidatePath("/settings");

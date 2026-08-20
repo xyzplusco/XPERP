@@ -946,3 +946,22 @@ viewer는 전사 열람은 되지만 쓰기가 403 으로 차단됨을 확인. �
 ### 다음 (계획서 3단계)
 
 저장된 목록 뷰 / 칸반(구간 이동) / PL 미배정 큐 46건 / 활동 타임라인 통합
+
+
+## [2026-08-20] 계정 생성 실패 원인 노출 + user:create 재작성
+
+'저장에 실패했습니다. 권한을 확인하세요.' 만 뜨고 진짜 이유를 알 수 없다는 보고.
+`error=save` 는 (1) Auth 사용자 생성 실패 (2) users 행 insert 실패 둘 다에서 나는데
+문구는 권한 얘기를 하고 있어서 오진을 유도했다.
+
+- `createAccountAction` / `resetPasswordAction` 이 실패 시 `&reason=<Supabase 원문>` 을 붙여 리다이렉트
+- `SaveNotice` 에 `reason` prop 추가 — 원문을 모노스페이스로 아래 줄에 표시
+- `save` 문구를 '저장하지 못했습니다.' 로 교체 (권한 언급 삭제), `forbidden` 은 '마스터 어드민만' 으로
+- 라이브에서 같은 키·같은 코드 경로로 재현 시도 → Auth 생성·users insert 모두 정상.
+  즉 서버가 돌려주는 원문을 봐야 원인이 잡힌다.
+
+`scripts/create_user.mjs` 는 구 역할(admin/partner/member)로 남아 있어 지금 스키마의
+`users_global_role_check` 에 걸린다. Postgres 직결 + `auth.users` 수동 insert 방식이라 깨지기도 쉬웠다.
+service_role Admin API 기반으로 새로 썼다 — 4역할 지원, owner 중복 차단, 동명이인 안내,
+임시 비밀번호 자동 생성, 기존 이메일이면 비밀번호만 재설정. HTTPS만 쓰므로 5432 막힌 환경에서도 동작.
+라이브에서 생성 → 확인 → 삭제까지 검증 (users 1개로 원복).

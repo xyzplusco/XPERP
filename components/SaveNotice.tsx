@@ -1,9 +1,17 @@
-export function SaveNotice({ saved, error }: { saved?: string; error?: string }) {
+export function SaveNotice({
+  saved,
+  error,
+  reason,
+}: {
+  saved?: string;
+  error?: string;
+  reason?: string;
+}) {
   if (saved) return <p className="notice noticeOk">저장되었습니다.</p>;
   if (!error) return null;
   const messages: Record<string, string> = {
-    save: "저장에 실패했습니다. 권한을 확인하세요.",
-    forbidden: "관리자만 수정할 수 있습니다.",
+    save: "저장하지 못했습니다.",
+    forbidden: "마스터 어드민만 할 수 있습니다.",
     upload: "파일 업로드에 실패했습니다.",
     toobig: "50MB 이하 파일만 업로드할 수 있습니다.",
     empty: "내용을 입력하세요.",
@@ -15,5 +23,10 @@ export function SaveNotice({ saved, error }: { saved?: string; error?: string })
     self: "본인 계정은 삭제할 수 없습니다.",
     nokey: "SUPABASE_SERVICE_ROLE_KEY 가 설정되지 않아 계정을 만들 수 없습니다.",
   };
-  return <p className="notice noticeError">{messages[error] ?? "요청을 처리하지 못했습니다."}</p>;
+  return (
+    <p className="notice noticeError">
+      {messages[error] ?? "요청을 처리하지 못했습니다."}
+      {reason ? <span className="noticeReason">{reason}</span> : null}
+    </p>
+  );
 }

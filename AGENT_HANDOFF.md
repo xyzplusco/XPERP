@@ -30,7 +30,7 @@
   NEXT_PUBLIC_SUPABASE_ANON_KEY
   ```
   `SUPABASE_DB_URL`, `SUPABASE_ACCESS_TOKEN` 은 로컬 전용이므로 Vercel에 넣지 말 것.
-- PM/PL 계정 발급 (`npm run user:create`). 현재 계정은 관리자 1개(yks@xyzplus.co → 윤권상)뿐.
+- PM/PL 계정 발급. 설정 화면에서 만들거나 `npm run user:create`. 현재 계정은 owner 1개(yks@xyzplus.co → 윤권상)뿐.
 - 계약 138건 미반영 (`npm run contracts:prepare` 부터). documents 0건, 파트너 NDA 대부분 미확인 상태.
 - 프로젝트는 2026-08-18 통합 파이프라인 기준으로 재구성됨 (90건). Unsorted 25건은 서비스섹터가 비어 있던 행.
 
@@ -89,8 +89,15 @@ npm run db:migrate:api   # Management API 경유 (SUPABASE_ACCESS_TOKEN 필요, 
 `NEXT_PUBLIC_` 접두어를 붙이면 안 되고, `lib/supabase/admin.ts` 를 통해 server action 안에서만 쓴다.
 키가 없으면 설정 화면이 안내 문구를 띄우고 생성 기능만 비활성화된다.
 
-비상용으로 터미널 스크립트도 유지: `npm run user:create -- --email .. --password .. --role member --person "이름"`
-(owner 계정을 잃었을 때의 복구 경로이므로 지우지 말 것)
+비상용으로 터미널 스크립트도 유지 (owner 계정을 잃었을 때의 복구 경로이므로 지우지 말 것):
+
+```bash
+npm run user:create -- --email pl@xyzplus.co --role member --person "김수민"
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` 만 있으면 되고 Postgres 직결이 필요 없다(HTTPS Admin API).
+`--password` 생략 시 임시 비밀번호를 만들어 출력한다. 역할은 owner/staff/member/viewer.
+이미 있는 이메일이면 비밀번호만 재설정한다.
 
 ## 3. 앱 구조
 

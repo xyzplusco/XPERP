@@ -1206,3 +1206,134 @@ export async function getPersonOptions(): Promise<[string, string][]> {
     .map(([id, name]) => [id, name] as [string, string])
     .sort((a, b) => a[1].localeCompare(b[1], "ko"));
 }
+
+// ── 주간보고 확인 (어드민) ──────────────────────────────────────────────────
+export type WeeklyReviewRow = {
+  projectId: string;
+  name: string;
+  company: string | null;
+  plName: string | null;
+  plPersonId: string | null;
+  updateId: string | null;
+  body: string;
+  confirmedAt: string | null;
+  reviewNote: string | null;
+};
+
+export async function getWeeklyReview(label: string): Promise<WeeklyReviewRow[]> {
+  const supabase = await createSupabaseServer();
+  const [projectRes, updateRes] = await Promise.all([
+    supabase
+      .from("projects")
+      .select(
+        "id, name, primary_pl_person_id, " +
+          "company:companies!projects_company_id_fkey(name_ko), " +
+          "pl:people!projects_primary_pl_person_id_fkey(id, name_ko)"
+      )
+      .is("deleted_at", null)
+      .in("status", ["confirmed", "likely", "discussing", "managed"])
+      .limit(1000),
+    supabase
+      .from("project_weekly_updates")
+      .select("id, project_id, body, confirmed_at, review_note")
+      .eq("update_label", label)
+      .limit(1000),
+  ]);
+
+  const updates = new Map(
+    ((updateRes.data ?? []) as {
+      id: string;
+      project_id: string;
+      body: string;
+      confirmed_at: string | null;
+      review_note: string | null;
+    }[]).map((row) => [row.project_id, row])
+  );
+
+  return ((projectRes.data ?? []) as unknown as Record<string, unknown>[])
+    .map((row) => {
+      const company = one(row.company as { name_ko: string } | { name_ko: string }[]);
+      const pl = one(row.pl as { id: string; name_ko: string } | { id: string; name_ko: string }[]);
+      const update = updates.get(row.id as string);
+      return {
+        projectId: row.id as string,
+        name: row.name as string,
+        company: company?.name_ko ?? null,
+        plName: pl?.name_ko ?? null,
+        plPersonId: pl?.id ?? null,
+        updateId: update?.id ?? null,
+        body: update?.body ?? "",
+        confirmedAt: update?.confirmed_at ?? null,
+        reviewNote: update?.review_note ?? null,
+      };
+    })
+    .sort((a, b) => {
+      // 미작성 → 미확인 → 확인됨 순. 같은 그룹 안에서는 PL 이름 순.
+      const rank = (row: WeeklyReviewRow) => (!row.updateId ? 0 : !row.confirmedAt ? 1 : 2);
+      return rank(a) - rank(b) || (a.plName ?? "").localeCompare(b.plName ?? "", "ko") || a.name.localeCompare(b.name, "ko");
+    });
+}
+
+// 티켓 상세
+export async function getTicket(id: string) {
+  const supabase = await createSupabaseServer();
+  const { data: task } = await supabase
+    .from("tasks")
+    .select(
+      "id, title, description, status, priority, due_date, created_at, completed_at, project_id, assignee_person_id, " +
+        "project:projects!tasks_project_id_fkey(id, name), " +
+        "assignee:people!tasks_assignee_person_id_fkey(id, name_ko), " +
+        "company:companies!tasks_company_id_fkey(id, name_ko), " +
+        "creator:users!tasks_created_by_user_id_fkey(email)"
+    )
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!task) return null;
+
+  const record = task as unknown as Record<string, unknown>;
+  const project = one(record.project as { id: string; name: string } | { id: string; name: string }[]);
+
+  const [commentRes, notes] = await Promise.all([
+    supabase
+      .from("task_comments")
+      .select("id, body, created_at, author:users!task_comments_author_user_id_fkey(email)")
+      .eq("task_id", id)
+      .order("created_at", { ascending: true })
+      .limit(200),
+    project
+      ? supabase
+          .from("meeting_notes")
+          .select("id, title, meeting_date, storage_path")
+          .eq("project_id", project.id)
+          .order("meeting_date", { ascending: false })
+          .limit(10)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  return {
+    task: Object.assign({}, record, {
+      project,
+      assignee: one(record.assignee as { id: string; name_ko: string } | { id: string; name_ko: string }[]),
+      company: one(record.company as { id: string; name_ko: string } | { id: string; name_ko: string }[]),
+      creator: one(record.creator as { email: string } | { email: string }[]),
+    }) as Record<string, unknown> & {
+      project: { id: string; name: string } | null;
+      assignee: { id: string; name_ko: string } | null;
+      company: { id: string; name_ko: string } | null;
+      creator: { email: string } | null;
+    },
+    comments: ((commentRes.data ?? []) as unknown as Record<string, unknown>[]).map((row) => ({
+      id: row.id as string,
+      body: row.body as string,
+      created_at: row.created_at as string,
+      author: one(row.author as { email: string } | { email: string }[])?.email ?? null,
+    })),
+    meetingNotes: (notes.data ?? []) as unknown as {
+      id: string;
+      title: string;
+      meeting_date: string | null;
+      storage_path: string | null;
+    }[],
+  };
+}

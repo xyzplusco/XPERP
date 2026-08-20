@@ -1060,3 +1060,74 @@ service_role Admin API 기반으로 새로 썼다 — 4역할 지원, owner 중�
 projects 88 (PL 미배정 45 · PM 미배정 72 · 매출 미입력 82 · 종료일 미입력 85 · 30일 무업데이트 75),
 companies 463 (산업 미입력 399), people 427, tasks 151 (전부 backlog·담당자 0),
 documents 0, document_requirements 197 전부 needed, meeting_notes 0, events 2, activity_logs 536.
+
+
+## [2026-08-20] 알림 · 주간보고 확인 · 티켓 개편
+
+### 설계 결정 (사용자 확인)
+
+- **결재 게이트 대신 '확인 + 보완 요청'.** 승인해야 파이프라인에 반영되는 구조로 만들면
+  병목이 'PL이 안 씀' → '어드민이 승인 안 함' 으로 옮겨갈 뿐이고, 원래 없애려던
+  *경영지원이 확인해서 옮겨 적는* 이중구조가 그대로 부활한다. 업데이트는 즉시 살아있고,
+  어드민은 읽고 확인하거나 한 줄 코멘트로 보완을 요청한다.
+- **전달 채널은 앱 안 알림함만.** 이메일·슬랙 없음.
+- **주간보고 마감은 매주 금요일 고정.**
+
+### 알림 계층
+
+라우팅은 **계정 역할이 아니라 프로젝트 배정**으로 정한다. 역할은 전사 집계 알림 수신 여부만 가른다.
+
+- 1차 수신자 = PL (`primary_pl_person_id`), PM·보조PL은 함께 받음
+- **담당자가 없으면 어드민 큐로 간다.** PL 미배정 37건이 아무에게도 안 가면 그냥 증발한다
+- 본인이 일으킨 사건은 본인에게 알리지 않는다 (`notify()` 에서 actor 제외)
+- 계정이 없는 파트너는 수신 대상에서 자동 제외 (`userIdsForPeople`)
+
+### 알림 두 종류 — 크론이 필요 없는 이유
+
+| | 예 | 저장 | 갱신 |
+|---|---|---|---|
+| **사건 알림** | 티켓 배정, 댓글, 보완 요청, 상태 변경 | `notifications` 테이블 | 읽음 처리 |
+| **상태 알림** | 미작성 N건, 정체 N건, PL 미배정 N건 | 저장 안 함 | 볼 때마다 계산 |
+
+상태 알림을 저장하지 않으니 **스케줄러가 없어도 항상 정확하고, 해결되면 저절로 사라진다.**
+금요일 독촉은 `weeklyDueSoon()` 이 요일을 보고 강조 표시만 바꾼다.
+나중에 이메일을 붙일 때만 Vercel Cron 이 필요해진다.
+
+### 마이그레이션 20260820000000_notifications_review_comments.sql
+
+- `notifications` — 수신자 본인만 조회/수정/삭제, insert 는 `xp_can_write()` (남에게 보내야 하므로)
+- `project_weekly_updates` 에 `confirmed_at` / `confirmed_by_user_id` / `review_note` /
+  `review_requested_at` / `review_requested_by_user_id` 추가. update 정책은 `xp_is_admin()`
+- `task_comments` — 티켓을 볼 수 있는 사람만 조회, 작성자·어드민만 삭제
+
+### 화면
+
+- `/inbox` — 상단에 상태 알림(숫자 타일, 급한 건 빨강), 아래에 받은 알림. 사이드바에 안 읽은 수 배지
+- `/weekly/review` — 어드민 전용(member 는 404). 주차별 대상/미작성/확인대기/확인완료,
+  **미작성 담당 PL 명단**, 항목마다 확인·보완요청 버튼
+- `/tickets` — `TicketTable` 을 버리고 `BulkTable` 그리드로 교체.
+  체크박스 · 일괄 담당자/상태/프로젝트 · 휴지통 · 열 너비 조절이 한 번에 붙었다
+- `/tickets/[id]` — `T-XXXXXXXX` 번호, 내용·설명·담당자·프로젝트·상태·우선순위·기한 편집,
+  댓글 스레드, 프로젝트 회의록 목록, 휴지통 버튼
+
+### 고친 버그
+
+`returnPath` 에 이미 쿼리가 붙어 있는데 `?saved=1` 을 그대로 이어 붙여
+`/tickets?scope=unsorted?trashed=2` 같은 주소가 나오고 있었다. `withQuery()` 헬퍼로 45곳 교체.
+
+### 검증 (라이브, staff·member 임시 계정 2개)
+
+1. member 가 `/weekly` 에서 8월3차 작성 → 저장 확인
+2. staff `/weekly/review` 에 '확인 대기 1' 로 잡힘, 미작성 담당 표에 PL별 건수(PL 미배정 37·김수민 18·…)
+3. staff 가 보완 요청 → **member 알림함에 도착, 사이드바 배지 1**, staff 본인에게는 안 감
+4. staff 가 확인 → 확인 완료 1, 보완 메모 해제
+5. 티켓 담당자 지정 → member 에게 배정 알림, 댓글 → 댓글 알림 (배지 3)
+6. 티켓 2건 체크 후 휴지통 → 미분류 140 → 138
+7. member 는 `/weekly/review` 404
+8. 검증 후 전량 원복: tasks 151 · 미분류 140 · notifications 0 · task_comments 0 ·
+   weekly updates 413 · users 3(yks owner, hjy·pjh member)
+
+### 남은 것
+
+- `components/TicketTable.tsx` 는 더 이상 쓰지 않는다. 삭제할 것.
+- 이메일 알림을 붙이려면 Vercel Cron + Resend. 지금 구조에서 상태 알림 계산 함수를 그대로 재사용하면 된다.

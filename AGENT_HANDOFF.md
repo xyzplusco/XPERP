@@ -30,7 +30,7 @@ npm run dev                  # http://localhost:3000
 |---|---|
 | 아키텍처 | Next.js 16.3 (App Router, RSC + Server Actions) + Supabase (Auth/DB/Storage) |
 | 배포 | Vercel, 함수 리전 도쿄(`hnd1`) 고정. GitHub `xyzplusco/XPERP` push 시 자동 배포 |
-| DB 스키마 | 마이그레이션 9건 전부 라이브 적용 완료 (2026-08-20 확인) |
+| DB 스키마 | 마이그레이션 10건 전부 라이브 적용 완료 (2026-08-20 확인) |
 | 인증 | Supabase Auth 이메일/비밀번호. `proxy.ts` 세션 가드 |
 | 권한 | owner / staff / member / viewer 4단계, RLS로 DB 레벨 강제 (§2) |
 | 문서 저장 | Storage `xp-documents`, `xp-meeting-notes` (private, signed URL) |
@@ -160,7 +160,9 @@ app/customers[/[id]]         # 고객사 목록/상세
 app/partners[/[id]]          # 파트너 명부/상세
 app/partners/board           # 파트너 관리 보드 (라벨이 아니라 근거로 활동 파트너 판정 + 일괄 분류)
 app/events[/[id]]            # 이벤트 목록/상세 (참석자 검색 추가·붙여넣기·연락처 일괄복사)
-app/tickets                  # 티켓
+app/inbox                    # 알림함 (상태 알림 타일 + 받은 알림)
+app/weekly/review            # 주간보고 전사 확인 (어드민 전용, member 는 404)
+app/tickets[/[id]]           # 티켓 목록(그리드) / 상세 (T-XXXXXXXX, 댓글, 회의록)
 app/documents                # 문서 레지스트리 (보관 + 미비)
 app/trash                    # 휴지통 (복구·영구삭제, owner)
 app/settings                 # 내 계정·비밀번호 변경 / 계정 관리(owner)
@@ -172,13 +174,31 @@ components/InviteeLookup.tsx # 이벤트 참석자 파트너 검색 추가 + 인
 components/InviteeManager.tsx / MeetingNotesPanel / DocumentsPanel / DealTable / SaveNotice
 
 scripts/                     # 엑셀 왕복·마이그레이션·계약 임포트·계정 생성 (§5)
-supabase/migrations/         # 9건, 전부 라이브 적용됨
+supabase/migrations/         # 10건, 전부 라이브 적용됨
 docs/permissions-plan.md     # 권한 재설계 기획
 docs/ux-roadmap.md           # UX 로드맵 1~3단계
 ```
 
 삭제된 것 (구 버전): `app/network`, `app/search`, `components/CustomerTable|DataTable|SectionHeader`,
 `lib/operational-data.ts` → `_to_delete/` 로 이동. 폴더째 지워도 된다.
+
+## 3.4 알림 구조
+
+`lib/notifications.ts` 한 파일에 다 있다. **알림은 두 종류다.**
+
+- **사건 알림** — 티켓 배정·댓글·보완 요청·프로젝트 상태 변경처럼 그 순간에만 알 수 있는 것.
+  `notify()` 로 `notifications` 테이블에 넣고 읽음 처리한다. 본인이 일으킨 사건은 본인에게 안 간다.
+- **상태 알림** — 미작성 N건, 정체 N건, PL 미배정 N건처럼 지금 세면 되는 것.
+  `getStateAlerts()` 가 볼 때마다 계산한다. **저장하지 않으므로 스케줄러가 필요 없고 해결되면 사라진다.**
+
+수신자는 **계정 역할이 아니라 프로젝트 배정**으로 정한다(PL 1차, PM·보조PL 함께).
+담당자가 없으면 어드민에게 간다. 계정이 없는 파트너는 자동 제외된다.
+
+주간 업데이트는 **결재가 아니라 확인**이다. PL이 쓰면 즉시 반영되고, 어드민은 `/weekly/review` 에서
+확인하거나 한 줄 보완 요청을 건다. 보완 요청은 PL에게 알림으로 간다.
+승인 게이트를 넣지 않은 이유는 `AGENT_LOG.md` 2026-08-20 항목에 있다. **되돌리지 말 것.**
+
+이메일·슬랙은 붙이지 않았다. 붙일 때는 Vercel Cron 에서 `getStateAlerts()` 를 그대로 재사용하면 된다.
 
 ## 3.5 표(그리드) 사용법
 
@@ -247,9 +267,8 @@ staff·owner 용 화면으로 볼 것.
 
 ### A. 실사용을 막고 있는 것
 
-1. **주간보고 리마인더** — 매주 정해진 요일에 미작성 PL에게 알림(이메일/슬랙).
-   이게 없으면 `/weekly` 는 영영 빈칸이고, 그 위에 얹은 대시보드도 전부 무의미하다.
-2. **PL 미배정 큐** — 45건. 그리드 붙여넣기로 고치는 건 되지만 "누가 안 정해졌나"를 모으는 화면이 없다.
+1. ~~주간보고 리마인더~~ — 앱 안 알림으로 완료(2026-08-20). 이메일까지 필요하면 Vercel Cron + Resend.
+2. **PL 미배정 큐** — 37건(활성 기준). `/inbox` 상태 알림에는 잡히지만 배정 전용 화면은 아직 없다.
 3. **계약서 138건 임포트** — 스크립트 완성. 30분이면 끝난다. documents 0 → 138, 파트너 43명 NDA 확정.
 4. **티켓 151건 정리** — 살릴 것만 남기고 나머지 휴지통. 담당자·프로젝트 배정.
 

@@ -5,6 +5,7 @@ type NavItem = { href: string; label: string; adminOnly?: boolean };
 
 const ITEMS: NavItem[] = [
   { href: "/", label: "내 업무" },
+  { href: "/inbox", label: "알림" },
   { href: "/customers", label: "고객사" },
   { href: "/partners", label: "파트너" },
   { href: "/projects", label: "프로젝트" },

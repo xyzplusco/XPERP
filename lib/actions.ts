@@ -6,6 +6,8 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 import { canSeeRevenue, getSessionUser, isAdmin, isOwner } from "@/lib/auth";
 import { createSupabaseAdmin, generatePassword } from "@/lib/supabase/admin";
 import { getAssignablePeople, getProjectOptions } from "@/lib/queries";
+import { adminUserIds, notify, userIdsForPeople } from "@/lib/notifications";
+import { formatAmount, label } from "@/lib/labels";
 import {
   EDITABLE,
   ENTITY_PATH,
@@ -14,6 +16,11 @@ import {
   validateField,
   type EntityKey,
 } from "@/lib/bulk";
+
+// returnPath 에 이미 ?가 있을 수 있으므로 붙일 때 구분자를 골라 쓴다.
+function withQuery(path: string, query: string) {
+  return `${path}${path.includes("?") ? "&" : "?"}${query}`;
+}
 
 function text(formData: FormData, key: string): string | null {
   const value = formData.get(key);
@@ -56,6 +63,12 @@ export async function updateProjectAction(projectId: string, formData: FormData)
   const supabase = await createSupabaseServer();
   const user = await getSessionUser();
 
+  const { data: previous } = await supabase
+    .from("projects")
+    .select("name, status, contract_status, expected_revenue")
+    .eq("id", projectId)
+    .maybeSingle();
+
   const payload: Record<string, string | number | null> = {
     status: text(formData, "status") ?? "discussing",
     contract_status: text(formData, "contract_status"),
@@ -94,6 +107,37 @@ export async function updateProjectAction(projectId: string, formData: FormData)
     console.error("updateProjectAction", error.message);
     redirect(`/projects/${projectId}?error=save`);
   }
+  // 되돌리기 어려운 변경(계약 확정·중단·완료·매출)은 어드민에게 알린다.
+  const watched: string[] = [];
+  if (previous && payload.status !== previous.status) {
+    if (["confirmed", "done", "dropped"].includes(String(payload.status))) {
+      watched.push(`상태 ${label(previous.status)} → ${label(String(payload.status))}`);
+    }
+  }
+  if (previous && payload.contract_status !== previous.contract_status) {
+    watched.push(`구간 ${previous.contract_status ?? "–"} → ${payload.contract_status ?? "–"}`);
+  }
+  if (
+    previous &&
+    "expected_revenue" in payload &&
+    Number(payload.expected_revenue ?? 0) !== Number(previous.expected_revenue ?? 0)
+  ) {
+    watched.push(`매출 ${formatAmount(previous.expected_revenue)} → ${formatAmount(payload.expected_revenue as number | null)}`);
+  }
+
+  if (watched.length > 0) {
+    await notify({
+      recipientUserIds: await adminUserIds(),
+      actorUserId: user?.appUserId,
+      kind: "project_status_changed",
+      title: `${previous?.name ?? "프로젝트"} 변경`,
+      body: watched.join(" · "),
+      link: `/projects/${projectId}`,
+      entityType: "project",
+      entityId: projectId,
+    });
+  }
+
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/");
   redirect(`/projects/${projectId}?saved=1`);
@@ -236,10 +280,10 @@ export async function uploadDocumentAction(formData: FormData) {
   const file = formData.get("file");
 
   if (!entityType || !entityId || !UPLOAD_ENTITY_TYPES.has(entityType) || !(file instanceof File) || file.size === 0) {
-    redirect(`${returnPath}?error=upload`);
+    redirect(withQuery(returnPath, `error=upload`));
   }
   if (file.size > 50 * 1024 * 1024) {
-    redirect(`${returnPath}?error=toobig`);
+    redirect(withQuery(returnPath, `error=toobig`));
   }
 
   const supabase = await createSupabaseServer();
@@ -254,7 +298,7 @@ export async function uploadDocumentAction(formData: FormData) {
     .upload(storagePath, arrayBuffer, { contentType: file.type || "application/octet-stream" });
   if (storageError) {
     console.error("uploadDocumentAction storage", storageError.message);
-    redirect(`${returnPath}?error=upload`);
+    redirect(withQuery(returnPath, `error=upload`));
   }
 
   const { data: docRow, error: docError } = await supabase
@@ -275,7 +319,7 @@ export async function uploadDocumentAction(formData: FormData) {
     .single();
   if (docError || !docRow) {
     console.error("uploadDocumentAction insert", docError?.message);
-    redirect(`${returnPath}?error=upload`);
+    redirect(withQuery(returnPath, `error=upload`));
   }
 
   const { error: linkError } = await supabase.from("entity_documents").insert({
@@ -300,7 +344,7 @@ export async function uploadDocumentAction(formData: FormData) {
   }
 
   revalidatePath(returnPath);
-  redirect(`${returnPath}?saved=1`);
+  redirect(withQuery(returnPath, `saved=1`));
 }
 
 export async function updateUserAction(userId: string, formData: FormData) {
@@ -400,12 +444,12 @@ export async function uploadMeetingNoteAction(formData: FormData) {
   const returnPath = text(formData, "return_path") ?? "/";
   const file = formData.get("file");
 
-  if (!companyId && !projectId) redirect(`${returnPath}?error=upload`);
-  if (!(file instanceof File) || file.size === 0) redirect(`${returnPath}?error=upload`);
-  if (file.size > 50 * 1024 * 1024) redirect(`${returnPath}?error=toobig`);
+  if (!companyId && !projectId) redirect(withQuery(returnPath, `error=upload`));
+  if (!(file instanceof File) || file.size === 0) redirect(withQuery(returnPath, `error=upload`));
+  if (file.size > 50 * 1024 * 1024) redirect(withQuery(returnPath, `error=toobig`));
 
   const meetingDate = text(formData, "meeting_date");
-  if (!meetingDate) redirect(`${returnPath}?error=empty`);
+  if (!meetingDate) redirect(withQuery(returnPath, `error=empty`));
 
   const supabase = await createSupabaseServer();
   const user = await getSessionUser();
@@ -420,7 +464,7 @@ export async function uploadMeetingNoteAction(formData: FormData) {
     .upload(storagePath, arrayBuffer, { contentType: file.type || "application/octet-stream" });
   if (storageError) {
     console.error("uploadMeetingNoteAction storage", storageError.message);
-    redirect(`${returnPath}?error=upload`);
+    redirect(withQuery(returnPath, `error=upload`));
   }
 
   const { error } = await supabase.from("meeting_notes").insert({
@@ -440,11 +484,11 @@ export async function uploadMeetingNoteAction(formData: FormData) {
   if (error) {
     console.error("uploadMeetingNoteAction insert", error.message);
     await supabase.storage.from("xp-meeting-notes").remove([storagePath]);
-    redirect(`${returnPath}?error=upload`);
+    redirect(withQuery(returnPath, `error=upload`));
   }
 
   revalidatePath(returnPath);
-  redirect(`${returnPath}?saved=1`);
+  redirect(withQuery(returnPath, `saved=1`));
 }
 
 export async function deleteMeetingNoteAction(noteId: string, returnPath: string) {
@@ -459,7 +503,7 @@ export async function deleteMeetingNoteAction(noteId: string, returnPath: string
   const { error } = await supabase.from("meeting_notes").delete().eq("id", noteId);
   if (error) {
     console.error("deleteMeetingNoteAction", error.message);
-    redirect(`${returnPath}?error=forbidden`);
+    redirect(withQuery(returnPath, `error=forbidden`));
   }
 
   if (note?.storage_path) {
@@ -469,7 +513,7 @@ export async function deleteMeetingNoteAction(noteId: string, returnPath: string
   }
 
   revalidatePath(returnPath);
-  redirect(`${returnPath}?saved=1`);
+  redirect(withQuery(returnPath, `saved=1`));
 }
 
 // ---------------------------------------------------------------- 티켓
@@ -477,29 +521,46 @@ export async function deleteMeetingNoteAction(noteId: string, returnPath: string
 export async function createTicketAction(formData: FormData) {
   const title = text(formData, "title");
   const returnPath = text(formData, "return_path") ?? "/tickets";
-  if (!title) redirect(`${returnPath}?error=empty`);
+  if (!title) redirect(withQuery(returnPath, `error=empty`));
 
   const supabase = await createSupabaseServer();
   const user = await getSessionUser();
 
-  const { error } = await supabase.from("tasks").insert({
-    title,
-    description: text(formData, "description"),
-    status: "backlog",
-    priority: text(formData, "priority") ?? "normal",
-    project_id: text(formData, "project_id"),
-    assignee_person_id: text(formData, "assignee_person_id"),
-    due_date: text(formData, "due_date"),
-    created_by_user_id: user?.appUserId ?? null,
-  });
+  const assigneePersonId = text(formData, "assignee_person_id");
+  const { data: created, error } = await supabase
+    .from("tasks")
+    .insert({
+      title,
+      description: text(formData, "description"),
+      status: "backlog",
+      priority: text(formData, "priority") ?? "normal",
+      project_id: text(formData, "project_id"),
+      assignee_person_id: assigneePersonId,
+      due_date: text(formData, "due_date"),
+      created_by_user_id: user?.appUserId ?? null,
+    })
+    .select("id")
+    .single();
   if (error) {
     console.error("createTicketAction", error.message);
-    redirect(`${returnPath}?error=save`);
+    redirect(withQuery(returnPath, `error=save`));
+  }
+
+  if (assigneePersonId && created) {
+    await notify({
+      recipientUserIds: await userIdsForPeople([assigneePersonId]),
+      actorUserId: user?.appUserId,
+      kind: "ticket_assigned",
+      title: `티켓 배정 — ${title}`,
+      link: `/tickets/${created.id}`,
+      entityType: "task",
+      entityId: created.id,
+    });
   }
 
   revalidatePath("/tickets");
   revalidatePath(returnPath);
-  redirect(`${returnPath}?saved=1`);
+  redirect(withQuery(returnPath, `saved=1`));
 }
 
 export async function updateTicketAction(ticketId: string, formData: FormData) {
@@ -523,14 +584,34 @@ export async function updateTicketAction(ticketId: string, formData: FormData) {
     if (title) payload.title = title;
   }
 
+  const { data: before } = await supabase
+    .from("tasks")
+    .select("assignee_person_id, title")
+    .eq("id", ticketId)
+    .maybeSingle();
+
   const { error } = await supabase.from("tasks").update(payload).eq("id", ticketId);
   if (error) {
     console.error("updateTicketAction", error.message);
-    redirect(`${returnPath}?error=save`);
+    redirect(withQuery(returnPath, `error=save`));
   }
+
+  if (payload.assignee_person_id && payload.assignee_person_id !== before?.assignee_person_id) {
+    const user = await getSessionUser();
+    await notify({
+      recipientUserIds: await userIdsForPeople([payload.assignee_person_id]),
+      actorUserId: user?.appUserId,
+      kind: "ticket_assigned",
+      title: `티켓 배정 — ${payload.title ?? before?.title ?? ""}`,
+      link: `/tickets/${ticketId}`,
+      entityType: "task",
+      entityId: ticketId,
+    });
+  }
+
   revalidatePath("/tickets");
   revalidatePath(returnPath);
-  redirect(`${returnPath}?saved=1`);
+  redirect(withQuery(returnPath, `saved=1`));
 }
 
 export async function deleteTicketAction(ticketId: string, returnPath: string) {
@@ -538,11 +619,11 @@ export async function deleteTicketAction(ticketId: string, returnPath: string) {
   const { error } = await supabase.from("tasks").delete().eq("id", ticketId);
   if (error) {
     console.error("deleteTicketAction", error.message);
-    redirect(`${returnPath}?error=forbidden`);
+    redirect(withQuery(returnPath, `error=forbidden`));
   }
   revalidatePath("/tickets");
   revalidatePath(returnPath);
-  redirect(`${returnPath}?saved=1`);
+  redirect(withQuery(returnPath, `saved=1`));
 }
 
 export async function setProjectFolderAction(projectId: string, formData: FormData) {
@@ -570,7 +651,7 @@ export async function setProjectFolderAction(projectId: string, formData: FormDa
 export async function addInviteesAction(eventId: string, formData: FormData) {
   const raw = text(formData, "bulk");
   const returnPath = `/events/${eventId}`;
-  if (!raw) redirect(`${returnPath}?error=empty`);
+  if (!raw) redirect(withQuery(returnPath, `error=empty`));
 
   const supabase = await createSupabaseServer();
   const user = await getSessionUser();
@@ -599,7 +680,7 @@ export async function addInviteesAction(eventId: string, formData: FormData) {
     });
   }
 
-  if (rows.length === 0) redirect(`${returnPath}?error=empty`);
+  if (rows.length === 0) redirect(withQuery(returnPath, `error=empty`));
 
   // 이름이 정확히 일치하는 파트너가 한 명뿐이면 자동으로 연결한다.
   const names = Array.from(new Set(rows.map((r) => r.name as string)));
@@ -617,10 +698,10 @@ export async function addInviteesAction(eventId: string, formData: FormData) {
   const { error } = await supabase.from("event_invitees").insert(rows);
   if (error) {
     console.error("addInviteesAction", error.message);
-    redirect(`${returnPath}?error=save`);
+    redirect(withQuery(returnPath, `error=save`));
   }
   revalidatePath(returnPath);
-  redirect(`${returnPath}?saved=1`);
+  redirect(withQuery(returnPath, `saved=1`));
 }
 
 export async function updateInviteeAction(inviteeId: string, eventId: string, formData: FormData) {
@@ -725,13 +806,13 @@ export async function bulkUpdateAction(formData: FormData) {
   const returnPath = text(formData, "return_path") ?? "/";
   const ids = formData.getAll("id").filter((v): v is string => typeof v === "string");
 
-  if (!isValidEntity(entity) || ids.length === 0) redirect(`${returnPath}?error=empty`);
+  if (!isValidEntity(entity) || ids.length === 0) redirect(withQuery(returnPath, `error=empty`));
 
   const isProfileField = entity === "people" && field in PROFILE_EDITABLE;
   const spec = isProfileField ? PROFILE_EDITABLE[field] : EDITABLE[entity][field];
   const result = validateField(spec, value);
-  if (!result.ok) redirect(`${returnPath}?error=save`);
-  if (!(await assertAdminFor(entity, field))) redirect(`${returnPath}?error=forbidden`);
+  if (!result.ok) redirect(withQuery(returnPath, `error=save`));
+  if (!(await assertAdminFor(entity, field))) redirect(withQuery(returnPath, `error=forbidden`));
 
   const supabase = await createSupabaseServer();
 
@@ -744,18 +825,18 @@ export async function bulkUpdateAction(formData: FormData) {
     const { error } = await supabase.from("network_profiles").upsert(rows, { onConflict: "person_id" });
     if (error) {
       console.error("bulkUpdateAction profile", error.message);
-      redirect(`${returnPath}?error=save`);
+      redirect(withQuery(returnPath, `error=save`));
     }
   } else {
     const { error } = await supabase.from(entity).update({ [field]: result.value }).in("id", ids);
     if (error) {
       console.error("bulkUpdateAction", error.message);
-      redirect(`${returnPath}?error=save`);
+      redirect(withQuery(returnPath, `error=save`));
     }
   }
 
   revalidatePath(returnPath);
-  redirect(`${returnPath}?saved=${ids.length}`);
+  redirect(withQuery(returnPath, `saved=${ids.length}`));
 }
 
 // 휴지통으로 보낸다 (실제로 지우지 않는다).
@@ -763,7 +844,7 @@ export async function bulkTrashAction(formData: FormData) {
   const entity = text(formData, "entity") ?? "";
   const returnPath = text(formData, "return_path") ?? "/";
   const ids = formData.getAll("id").filter((v): v is string => typeof v === "string");
-  if (!isValidEntity(entity) || ids.length === 0) redirect(`${returnPath}?error=empty`);
+  if (!isValidEntity(entity) || ids.length === 0) redirect(withQuery(returnPath, `error=empty`));
 
   const supabase = await createSupabaseServer();
   const user = await getSessionUser();
@@ -774,12 +855,12 @@ export async function bulkTrashAction(formData: FormData) {
     .in("id", ids);
   if (error) {
     console.error("bulkTrashAction", error.message);
-    redirect(`${returnPath}?error=save`);
+    redirect(withQuery(returnPath, `error=save`));
   }
 
   revalidatePath(returnPath);
   revalidatePath("/trash");
-  redirect(`${returnPath}?trashed=${ids.length}`);
+  redirect(withQuery(returnPath, `trashed=${ids.length}`));
 }
 
 export async function restoreAction(entity: string, id: string) {
@@ -1206,4 +1287,194 @@ export async function changePasswordAction(formData: FormData) {
     redirect(`/settings?error=save&reason=${encodeURIComponent(error.message.slice(0, 300))}`);
   }
   redirect("/settings?saved=1");
+}
+
+// ── 알림 ────────────────────────────────────────────────────────────────────
+export async function markNotificationsReadAction(formData: FormData) {
+  const returnPath = text(formData, "return_path") ?? "/inbox";
+  const ids = formData.getAll("id").filter((v): v is string => typeof v === "string");
+  const supabase = await createSupabaseServer();
+  const now = new Date().toISOString();
+
+  const query = supabase.from("notifications").update({ read_at: now }).is("read_at", null);
+  const { error } = ids.length > 0 ? await query.in("id", ids) : await query;
+  if (error) console.error("markNotificationsReadAction", error.message);
+
+  revalidatePath("/inbox");
+  revalidatePath(returnPath);
+  redirect(returnPath);
+}
+
+export async function deleteNotificationAction(notificationId: string) {
+  const supabase = await createSupabaseServer();
+  await supabase.from("notifications").delete().eq("id", notificationId);
+  revalidatePath("/inbox");
+}
+
+// ── 주간 업데이트 확인 / 보완 요청 ──────────────────────────────────────────
+export async function confirmWeeklyUpdateAction(updateId: string, formData: FormData) {
+  const returnPath = text(formData, "return_path") ?? "/weekly/review";
+  const user = await getSessionUser();
+  if (!isAdmin(user)) redirect(withQuery(returnPath, `error=forbidden`));
+
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase
+    .from("project_weekly_updates")
+    .update({
+      confirmed_at: new Date().toISOString(),
+      confirmed_by_user_id: user?.appUserId ?? null,
+      review_note: null,
+      review_requested_at: null,
+    })
+    .eq("id", updateId);
+  if (error) {
+    console.error("confirmWeeklyUpdateAction", error.message);
+    redirect(withQuery(returnPath, `error=save&reason=${encodeURIComponent(error.message.slice(0, 200))}`));
+  }
+  revalidatePath(returnPath);
+  redirect(returnPath);
+}
+
+export async function requestWeeklyReviewAction(updateId: string, formData: FormData) {
+  const returnPath = text(formData, "return_path") ?? "/weekly/review";
+  const note = text(formData, "note");
+  const user = await getSessionUser();
+  if (!isAdmin(user)) redirect(withQuery(returnPath, `error=forbidden`));
+  if (!note) redirect(withQuery(returnPath, `error=empty`));
+
+  const supabase = await createSupabaseServer();
+  const { data: row } = await supabase
+    .from("project_weekly_updates")
+    .select("project_id, update_label, project:projects!project_weekly_updates_project_id_fkey(name, primary_pl_person_id, secondary_pl_person_id, candidate_pm_person_id)")
+    .eq("id", updateId)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("project_weekly_updates")
+    .update({
+      review_note: note,
+      review_requested_at: new Date().toISOString(),
+      review_requested_by_user_id: user?.appUserId ?? null,
+      confirmed_at: null,
+      confirmed_by_user_id: null,
+    })
+    .eq("id", updateId);
+  if (error) {
+    console.error("requestWeeklyReviewAction", error.message);
+    redirect(withQuery(returnPath, `error=save&reason=${encodeURIComponent(error.message.slice(0, 200))}`));
+  }
+
+  const project = Array.isArray(row?.project) ? row?.project[0] : row?.project;
+  if (project) {
+    const recipients = await userIdsForPeople([
+      project.primary_pl_person_id,
+      project.secondary_pl_person_id,
+      project.candidate_pm_person_id,
+    ]);
+    await notify({
+      recipientUserIds: recipients,
+      actorUserId: user?.appUserId,
+      kind: "weekly_review_requested",
+      title: `${project.name} — ${row?.update_label} 보완 요청`,
+      body: note,
+      link: `/weekly?label=${encodeURIComponent(String(row?.update_label ?? ""))}`,
+      entityType: "project",
+      entityId: row?.project_id as string,
+    });
+  }
+
+  revalidatePath(returnPath);
+  redirect(returnPath);
+}
+
+// ── 티켓 댓글 ───────────────────────────────────────────────────────────────
+export async function addTaskCommentAction(taskId: string, formData: FormData) {
+  const body = text(formData, "body");
+  const returnPath = `/tickets/${taskId}`;
+  if (!body) redirect(withQuery(returnPath, `error=empty`));
+
+  const user = await getSessionUser();
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase
+    .from("task_comments")
+    .insert({ task_id: taskId, author_user_id: user?.appUserId ?? null, body });
+  if (error) {
+    console.error("addTaskCommentAction", error.message);
+    redirect(withQuery(returnPath, `error=save&reason=${encodeURIComponent(error.message.slice(0, 200))}`));
+  }
+
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("title, assignee_person_id, created_by_user_id")
+    .eq("id", taskId)
+    .maybeSingle();
+  if (task) {
+    const assignees = await userIdsForPeople([task.assignee_person_id]);
+    await notify({
+      recipientUserIds: [...assignees, task.created_by_user_id],
+      actorUserId: user?.appUserId,
+      kind: "ticket_comment",
+      title: `${task.title} — 댓글`,
+      body,
+      link: returnPath,
+      entityType: "task",
+      entityId: taskId,
+    });
+  }
+
+  revalidatePath(returnPath);
+  redirect(withQuery(returnPath, `saved=1`));
+}
+
+export async function deleteTaskCommentAction(commentId: string, taskId: string) {
+  const supabase = await createSupabaseServer();
+  await supabase.from("task_comments").delete().eq("id", commentId);
+  revalidatePath(`/tickets/${taskId}`);
+}
+
+// 티켓 상세 편집 (상세 화면 폼)
+export async function updateTicketDetailAction(taskId: string, formData: FormData) {
+  const returnPath = `/tickets/${taskId}`;
+  const supabase = await createSupabaseServer();
+  const user = await getSessionUser();
+
+  const { data: before } = await supabase
+    .from("tasks")
+    .select("assignee_person_id, title")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  const payload: Record<string, string | null> = {
+    title: text(formData, "title"),
+    description: text(formData, "description"),
+    status: text(formData, "status"),
+    priority: text(formData, "priority"),
+    due_date: text(formData, "due_date"),
+    assignee_person_id: text(formData, "assignee_person_id"),
+    project_id: text(formData, "project_id"),
+  };
+  if (!payload.title) redirect(withQuery(returnPath, `error=empty`));
+
+  const { error } = await supabase.from("tasks").update(payload).eq("id", taskId);
+  if (error) {
+    console.error("updateTicketDetailAction", error.message);
+    redirect(withQuery(returnPath, `error=save&reason=${encodeURIComponent(error.message.slice(0, 200))}`));
+  }
+
+  if (payload.assignee_person_id && payload.assignee_person_id !== before?.assignee_person_id) {
+    const recipients = await userIdsForPeople([payload.assignee_person_id]);
+    await notify({
+      recipientUserIds: recipients,
+      actorUserId: user?.appUserId,
+      kind: "ticket_assigned",
+      title: `티켓 배정 — ${payload.title}`,
+      link: returnPath,
+      entityType: "task",
+      entityId: taskId,
+    });
+  }
+
+  revalidatePath(returnPath);
+  revalidatePath("/tickets");
+  redirect(withQuery(returnPath, `saved=1`));
 }

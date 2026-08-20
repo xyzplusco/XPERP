@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SaveNotice } from "@/components/SaveNotice";
 import { saveWeeklyUpdatesAction } from "@/lib/actions";
-import { requireUser } from "@/lib/auth";
+import { isAdmin, requireUser } from "@/lib/auth";
 import { getWeeklyBoard } from "@/lib/queries";
 import { currentWeek, previousWeek, recentWeeks, type Week } from "@/lib/week";
 
@@ -39,6 +39,14 @@ export default async function WeeklyPage({
         </p>
       ) : null}
       <SaveNotice error={error} />
+
+      {isAdmin(user) ? (
+        <div className="filterBar">
+          <Link href={`/weekly/review?label=${encodeURIComponent(week.label)}`} className="smallButton">
+            전사 확인 화면
+          </Link>
+        </div>
+      ) : null}
 
       <div className="tabRow">
         {weeks.map((item) => (

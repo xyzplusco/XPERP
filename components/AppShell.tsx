@@ -5,8 +5,11 @@ import { signOutAction } from "@/lib/actions";
 import { ROLE_LABEL, type SessionUser } from "@/lib/auth";
 import { NavLinks } from "@/components/NavLinks";
 import { TicketDialog } from "@/components/TicketDialog";
+import { getUnreadCount } from "@/lib/notifications";
 
 export async function AppShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
+  const unread = user.appUserId ? await getUnreadCount() : 0;
+
   return (
     <div className="appShell">
       <aside className="sidebar">
@@ -14,7 +17,7 @@ export async function AppShell({ user, children }: { user: SessionUser; children
           <img src="/logo.png" alt="XP" className="brandLogo" />
         </Link>
         <nav className="navList">
-          <NavLinks items={navigationFor(user)} />
+          <NavLinks items={navigationFor(user)} badges={{ "/inbox": unread }} />
         </nav>
         <div className="sidebarActions">
           <TicketDialog />

@@ -1031,3 +1031,32 @@ service_role Admin API 기반으로 새로 썼다 — 4역할 지원, owner 중�
 - 허용값 아닌 값 / 수정 불가 필드 → 칸별로 사유 반환
 - 비밀번호 변경 → 새 비밀번호 로그인 성공, 8자 미만 거부
 - 검증 계정 삭제 후 users 3개(yks owner, hjy·pjh member), projects 88 로 원복 확인
+
+
+## [2026-08-20] 인수인계 문서 정비
+
+다른 에이전트(ChatGPT/Codex)로 넘길 것을 전제로 `AGENT_HANDOFF.md` 를 전면 갱신했다.
+이전 문서는 8/18 기준이라 마이그레이션 8건·projects 90·권한 admin 2단계로 남아 있었고,
+§5 우선순위는 이미 끝난 항목(이벤트 초대자 임포트, 주차 이력 임포트)을 미완으로 적고 있었다.
+
+바꾼 것:
+- §0 을 '시작하는 사람에게' 로 재작성 — 읽는 순서, 설치 명령, 현재 상태표, **데이터 실측표** 추가
+- §1 '지금 막혀 있는 것' — 주간보고 미작동 / 계약 138건 미임포트 / 티켓 151건 미할당 /
+  Supabase personal access token 폐기 권장 / `_to_delete/` 삭제 가능
+- §3 앱 구조 — 현재 파일 기준으로 다시 씀 (weekly·tickets·trash·board·bulk.ts·week.ts·admin.ts·vercel.json 누락돼 있었음)
+- §5 npm 스크립트 표 신설
+- §6 다음 작업 우선순위 A~D 로 재작성 (실측 근거 포함)
+- §7 작업 규칙 신설 — **검증 방법**(임시 계정 + 실제 세션 쿠키 + Next-Action 직접 호출), 마이그레이션 사전 검증,
+  되돌리면 안 되는 성능 결정 4가지, 디자인 규칙(설명형 문구 금지)
+- §8 하지 말 것 — 파트너 DB 일괄 변경 금지, 라이브 대량 변경 시 전후 건수 보고 추가
+
+### 문서에 남기지 않은 것 (구두로만 전달할 것)
+
+- Supabase service_role 키 값, personal access token 값 — 문서·저장소에 넣지 않는다
+- Vercel 계정 접근 권한
+
+### 데이터 실측 (이 시점 기준, 문서 §0 에 반영)
+
+projects 88 (PL 미배정 45 · PM 미배정 72 · 매출 미입력 82 · 종료일 미입력 85 · 30일 무업데이트 75),
+companies 463 (산업 미입력 399), people 427, tasks 151 (전부 backlog·담당자 0),
+documents 0, document_requirements 197 전부 needed, meeting_notes 0, events 2, activity_logs 536.

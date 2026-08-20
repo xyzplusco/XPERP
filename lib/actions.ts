@@ -107,6 +107,14 @@ export async function updateProjectAction(projectId: string, formData: FormData)
     console.error("updateProjectAction", error.message);
     redirect(`/projects/${projectId}?error=save`);
   }
+  await logActivity({
+    entityType: "project",
+    entityId: projectId,
+    action: "update",
+    before: previous,
+    after: payload,
+  });
+
   // 되돌리기 어려운 변경(계약 확정·중단·완료·매출)은 어드민에게 알린다.
   const watched: string[] = [];
   if (previous && payload.status !== previous.status) {
@@ -614,9 +622,15 @@ export async function updateTicketAction(ticketId: string, formData: FormData) {
   redirect(withQuery(returnPath, `saved=1`));
 }
 
+// 목록의 일괄 삭제(bulkTrashAction)와 동작을 맞춘다. 하드 삭제가 아니라 휴지통행이다.
 export async function deleteTicketAction(ticketId: string, returnPath: string) {
   const supabase = await createSupabaseServer();
-  const { error } = await supabase.from("tasks").delete().eq("id", ticketId);
+  const user = await getSessionUser();
+  const { error } = await supabase
+    .from("tasks")
+    .update({ deleted_at: new Date().toISOString(), deleted_by_user_id: user?.appUserId ?? null })
+    .eq("id", ticketId);
+  await logActivity({ entityType: "tasks", entityId: ticketId, action: "trash" });
   if (error) {
     console.error("deleteTicketAction", error.message);
     redirect(withQuery(returnPath, `error=forbidden`));
@@ -792,6 +806,13 @@ export async function inlineUpdateAction(
     if (error) return { ok: false, message: error.message };
   }
 
+  await logActivity({
+    entityType: entity,
+    entityId: id,
+    action: "inline_update",
+    after: { [field]: result.value },
+  });
+
   // 화면은 클라이언트가 낙관적으로 이미 갱신했다.
   // 여기서 revalidatePath 를 하면 셀 하나 고칠 때마다 페이지 전체가 다시 그려져 눈에 띄게 느려진다.
   void returnPath;
@@ -835,6 +856,10 @@ export async function bulkUpdateAction(formData: FormData) {
     }
   }
 
+  for (const id of ids) {
+    await logActivity({ entityType: entity, entityId: id, action: "bulk_update", after: { [field]: result.value } });
+  }
+
   revalidatePath(returnPath);
   redirect(withQuery(returnPath, `saved=${ids.length}`));
 }
@@ -856,6 +881,10 @@ export async function bulkTrashAction(formData: FormData) {
   if (error) {
     console.error("bulkTrashAction", error.message);
     redirect(withQuery(returnPath, `error=save`));
+  }
+
+  for (const id of ids) {
+    await logActivity({ entityType: entity, entityId: id, action: "trash" });
   }
 
   revalidatePath(returnPath);
@@ -934,18 +963,33 @@ export async function saveWeeklyUpdatesAction(formData: FormData) {
   let saved = 0;
   let cleared = 0;
 
+  let failed = 0;
+
   for (const entry of entries) {
-    const { data: existing } = await supabase
+    // maybeSingle() 은 행이 2개 이상이면 오류를 낸다. 오류를 무시하면 '기록 없음' 으로 보고
+    // insert 를 또 해서 중복이 계속 늘어난다. limit(1) + 오류 확인으로 바꾼다.
+    const { data: existingRows, error: lookupError } = await supabase
       .from("project_weekly_updates")
       .select("id")
       .eq("project_id", entry.projectId)
       .eq("update_label", label)
-      .maybeSingle();
+      .limit(1);
+    if (lookupError) {
+      console.error("saveWeeklyUpdatesAction lookup", lookupError.message);
+      failed += 1;
+      continue;
+    }
+    const existing = existingRows?.[0] ?? null;
 
     if (entry.body === null) {
       // 비우면 해당 주차 기록을 지운다 (오기입 정정)
       if (existing) {
-        await supabase.from("project_weekly_updates").delete().eq("id", existing.id);
+        const { error } = await supabase.from("project_weekly_updates").delete().eq("id", existing.id);
+        if (error) {
+          console.error("saveWeeklyUpdatesAction delete", error.message);
+          failed += 1;
+          continue;
+        }
         cleared += 1;
       }
       continue;
@@ -958,6 +1002,7 @@ export async function saveWeeklyUpdatesAction(formData: FormData) {
         .eq("id", existing.id);
       if (error) {
         console.error("saveWeeklyUpdatesAction update", error.message);
+        failed += 1;
         continue;
       }
     } else {
@@ -970,6 +1015,7 @@ export async function saveWeeklyUpdatesAction(formData: FormData) {
       });
       if (error) {
         console.error("saveWeeklyUpdatesAction insert", error.message);
+        failed += 1;
         continue;
       }
     }
@@ -982,7 +1028,10 @@ export async function saveWeeklyUpdatesAction(formData: FormData) {
   revalidatePath("/weekly");
   revalidatePath("/");
   revalidatePath("/projects");
-  redirect(`/weekly?label=${encodeURIComponent(label)}&saved=${saved}&cleared=${cleared}`);
+  redirect(
+    `/weekly?label=${encodeURIComponent(label)}&saved=${saved}&cleared=${cleared}` +
+      (failed > 0 ? `&failed=${failed}` : "")
+  );
 }
 
 // ---------------------------------------------------------------- 계정 관리 (마스터 어드민)
@@ -1270,6 +1319,10 @@ export async function gridUpdateAction(
     }
   }
 
+  for (const row of results.filter((r) => r.ok)) {
+    await logActivity({ entityType: entity, entityId: row.id, action: "grid_paste", after: { [row.field]: true } });
+  }
+
   return { ok: results.every((r) => r.ok), results };
 }
 
@@ -1477,4 +1530,31 @@ export async function updateTicketDetailAction(taskId: string, formData: FormDat
   revalidatePath(returnPath);
   revalidatePath("/tickets");
   redirect(withQuery(returnPath, `saved=1`));
+}
+
+// ── 활동 로그 ───────────────────────────────────────────────────────────────
+// activity_logs 는 지금까지 엑셀 임포트 스크립트만 기록해 왔다(536건 전부 excel_*).
+// 화면에서 일어난 변경도 같은 표에 남겨야 '활동 이력' 이 의미를 갖는다.
+async function logActivity(input: {
+  entityType: string;
+  entityId: string;
+  action: string;
+  before?: unknown;
+  after?: unknown;
+}) {
+  try {
+    const supabase = await createSupabaseServer();
+    const user = await getSessionUser();
+    await supabase.from("activity_logs").insert({
+      actor_user_id: user?.appUserId ?? null,
+      entity_type: input.entityType,
+      entity_id: input.entityId,
+      action: input.action,
+      before_json: input.before ?? null,
+      after_json: input.after ?? null,
+    });
+  } catch (error) {
+    // 로그 실패가 본 작업을 막으면 안 된다.
+    console.error("logActivity", error);
+  }
 }

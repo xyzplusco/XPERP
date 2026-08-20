@@ -7,6 +7,14 @@ function one<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
 }
 
+// limit 은 페이지네이션이 아니라 상한이다. 상한에 닿으면 조용히 일부가 빠지므로
+// 최소한 서버 로그에 남긴다. 여기 걸리기 시작하면 페이지네이션을 붙일 때가 된 것이다.
+function warnIfCapped(label: string, rows: unknown[] | null | undefined, cap: number) {
+  if ((rows?.length ?? 0) >= cap) {
+    console.warn(`[상한 도달] ${label}: ${cap}건에서 잘렸습니다. 페이지네이션이 필요합니다.`);
+  }
+}
+
 export type DealRow = {
   id: string;
   name: string;
@@ -203,6 +211,7 @@ export async function getPartners() {
     console.error("getPartners", error.message);
     return [];
   }
+  warnIfCapped("파트너 명부", data, 1000);
   return (data as unknown as Record<string, unknown>[]).map((row) => ({
     ...(row as unknown as PartnerRow),
     company: one(row.company as Ref | Ref[]),
@@ -360,6 +369,36 @@ export type EntityDocument = {
   url: string | null;
 };
 
+// signed URL 은 파일 수만큼 왕복하면 안 된다. 버킷별로 한 번에 서명한다.
+// (문서 138건이 들어오면 순차 발급으로는 페이지가 눈에 띄게 느려진다)
+async function signMany(items: { bucket: string; path: string }[]): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (items.length === 0) return result;
+
+  const supabase = await createSupabaseServer();
+  const byBucket = new Map<string, string[]>();
+  for (const item of items) {
+    if (!item.path) continue;
+    const list = byBucket.get(item.bucket) ?? [];
+    list.push(item.path);
+    byBucket.set(item.bucket, list);
+  }
+
+  await Promise.all(
+    Array.from(byBucket.entries()).map(async ([bucket, paths]) => {
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrls(paths, 60 * 60);
+      if (error) {
+        console.error("signMany", bucket, error.message);
+        return;
+      }
+      for (const row of data ?? []) {
+        if (row.path && row.signedUrl) result.set(`${bucket}::${row.path}`, row.signedUrl);
+      }
+    })
+  );
+  return result;
+}
+
 export async function getEntityDocuments(entityType: string, entityId: string): Promise<EntityDocument[]> {
   const supabase = await createSupabaseServer();
   const { data, error } = await supabase
@@ -375,28 +414,28 @@ export async function getEntityDocuments(entityType: string, entityId: string): 
     return [];
   }
 
-  const documents: EntityDocument[] = [];
-  for (const raw of (data ?? []) as unknown as Record<string, unknown>[]) {
-    const doc = one(raw.document as Record<string, string | null> | Record<string, string | null>[]);
-    if (!doc) continue;
-    let url: string | null = (doc.external_url as string) ?? null;
-    if (!url && doc.storage_path) {
-      const { data: signed } = await supabase.storage
-        .from(doc.storage_bucket ?? "xp-documents")
-        .createSignedUrl(doc.storage_path, 60 * 60);
-      url = signed?.signedUrl ?? null;
-    }
-    documents.push({
-      id: doc.id as string,
-      title: (doc.title as string) ?? "",
-      document_type: (doc.document_type as string) ?? "",
-      file_name: doc.file_name as string | null,
-      uploaded_at: doc.uploaded_at as string | null,
-      sensitivity: (doc.sensitivity as string) ?? "internal",
-      url,
-    });
-  }
-  return documents;
+  const docs = ((data ?? []) as unknown as Record<string, unknown>[])
+    .map((raw) => one(raw.document as Record<string, string | null> | Record<string, string | null>[]))
+    .filter((doc): doc is Record<string, string | null> => Boolean(doc));
+
+  const signed = await signMany(
+    docs
+      .filter((doc) => !doc.external_url && doc.storage_path)
+      .map((doc) => ({ bucket: doc.storage_bucket ?? "xp-documents", path: doc.storage_path as string }))
+  );
+
+  return docs.map((doc) => ({
+    id: doc.id as string,
+    title: (doc.title as string) ?? "",
+    document_type: (doc.document_type as string) ?? "",
+    file_name: doc.file_name as string | null,
+    uploaded_at: doc.uploaded_at as string | null,
+    sensitivity: (doc.sensitivity as string) ?? "internal",
+    url:
+      (doc.external_url as string) ??
+      signed.get(`${doc.storage_bucket ?? "xp-documents"}::${doc.storage_path}`) ??
+      null,
+  }));
 }
 
 export async function getAllDocuments() {
@@ -419,25 +458,21 @@ export async function getAllDocuments() {
       .limit(300),
   ]);
 
-  const documents: EntityDocument[] = [];
-  for (const doc of (docsRes.data ?? []) as Record<string, string | null>[]) {
-    let url: string | null = doc.external_url ?? null;
-    if (!url && doc.storage_path) {
-      const { data: signed } = await supabase.storage
-        .from(doc.storage_bucket ?? "xp-documents")
-        .createSignedUrl(doc.storage_path, 60 * 60);
-      url = signed?.signedUrl ?? null;
-    }
-    documents.push({
-      id: doc.id as string,
-      title: doc.title ?? "",
-      document_type: doc.document_type ?? "",
-      file_name: doc.file_name,
-      uploaded_at: doc.uploaded_at,
-      sensitivity: doc.sensitivity ?? "internal",
-      url,
-    });
-  }
+  const docRows = (docsRes.data ?? []) as Record<string, string | null>[];
+  const signedDocs = await signMany(
+    docRows
+      .filter((doc) => !doc.external_url && doc.storage_path)
+      .map((doc) => ({ bucket: doc.storage_bucket ?? "xp-documents", path: doc.storage_path as string }))
+  );
+  const documents: EntityDocument[] = docRows.map((doc) => ({
+    id: doc.id as string,
+    title: doc.title ?? "",
+    document_type: doc.document_type ?? "",
+    file_name: doc.file_name,
+    uploaded_at: doc.uploaded_at,
+    sensitivity: doc.sensitivity ?? "internal",
+    url: doc.external_url ?? signedDocs.get(`${doc.storage_bucket ?? "xp-documents"}::${doc.storage_path}`) ?? null,
+  }));
 
   const requirements = ((reqsRes.data ?? []) as unknown as Record<string, unknown>[]).map((row) => ({
     id: row.id as string,
@@ -543,16 +578,19 @@ export type MeetingNote = {
 };
 
 async function decorateMeetingNotes(rows: Record<string, unknown>[]): Promise<MeetingNote[]> {
-  const supabase = await createSupabaseServer();
+  const signed = await signMany(
+    rows
+      .filter((row) => row.storage_path)
+      .map((row) => ({
+        bucket: (row.storage_bucket as string) ?? "xp-meeting-notes",
+        path: row.storage_path as string,
+      }))
+  );
+
   const notes: MeetingNote[] = [];
   for (const row of rows) {
-    let url: string | null = null;
-    if (row.storage_path) {
-      const { data: signed } = await supabase.storage
-        .from((row.storage_bucket as string) ?? "xp-meeting-notes")
-        .createSignedUrl(row.storage_path as string, 60 * 60);
-      url = signed?.signedUrl ?? null;
-    }
+    const url =
+      signed.get(`${(row.storage_bucket as string) ?? "xp-meeting-notes"}::${row.storage_path}`) ?? null;
     notes.push({
       id: row.id as string,
       title: (row.title as string) ?? "",
@@ -985,6 +1023,7 @@ export async function getPeopleDirectory(): Promise<DirectoryPerson[]> {
     console.error("getPeopleDirectory", error.message);
     return [];
   }
+  warnIfCapped("파트너 검색 명부", data, 2000);
   return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => {
     const company = one(row.company as { name_ko: string } | { name_ko: string }[]);
     return {
@@ -1030,108 +1069,26 @@ const DONE_DOC = new Set(["O", "Y", "완료"]);
 export async function getPartnerBoard(): Promise<PartnerBoardRow[]> {
   const supabase = await createSupabaseServer();
 
-  const [peopleRes, projectRes, memberRes, docRes] = await Promise.all([
-    supabase
-      .from("people")
-      .select(
-        "id, name_ko, title, email, phone, " +
-          "company:companies!people_primary_company_id_fkey(name_ko), " +
-          "profile:network_profiles(network_segment, partner_status, nda_status, profile_status, appointment_status)"
-      )
-      .is("deleted_at", null)
-      .limit(2000),
-    supabase
-      .from("projects")
-      .select(
-        "id, name, status, contract_status, primary_pl_person_id, secondary_pl_person_id, candidate_pm_person_id"
-      )
-      .is("deleted_at", null)
-      .limit(1000),
-    supabase.from("project_members").select("project_id, person_id, project_role").limit(2000),
-    supabase.from("entity_documents").select("entity_id").eq("entity_type", "person").limit(2000),
-  ]);
-
-  const projects = (projectRes.data ?? []) as {
-    id: string;
-    name: string;
-    status: string;
-    contract_status: string | null;
-    primary_pl_person_id: string | null;
-    secondary_pl_person_id: string | null;
-    candidate_pm_person_id: string | null;
-  }[];
-
-  const lastMap = await lastUpdateByProject(projects.map((p) => p.id));
-
-  type Acc = {
-    projectIds: Set<string>;
-    roles: Set<string>;
-    contract: number;
-    negotiation: number;
-    lastLabel: string | null;
-    lastDate: string | null;
-  };
-  const acc = new Map<string, Acc>();
-  const bucket = (personId: string) => {
-    let value = acc.get(personId);
-    if (!value) {
-      value = { projectIds: new Set(), roles: new Set(), contract: 0, negotiation: 0, lastLabel: null, lastDate: null };
-      acc.set(personId, value);
-    }
-    return value;
-  };
-
-  const attach = (personId: string | null, role: string, project: (typeof projects)[number]) => {
-    if (!personId) return;
-    const value = bucket(personId);
-    value.roles.add(role);
-    if (value.projectIds.has(project.id)) return;
-    value.projectIds.add(project.id);
-    if (project.contract_status === "계약" || project.status === "confirmed") value.contract += 1;
-    if (project.contract_status === "협상" || project.status === "discussing" || project.status === "likely") {
-      value.negotiation += 1;
-    }
-    const last = lastMap.get(project.id);
-    if (last?.date && (!value.lastDate || last.date > value.lastDate)) {
-      value.lastDate = last.date;
-      value.lastLabel = last.label;
-    }
-  };
-
-  const projectById = new Map(projects.map((p) => [p.id, p]));
-  for (const project of projects) {
-    attach(project.primary_pl_person_id, "PL", project);
-    attach(project.secondary_pl_person_id, "PL", project);
-    attach(project.candidate_pm_person_id, "PM", project);
-  }
-  for (const row of (memberRes.data ?? []) as { project_id: string; person_id: string; project_role: string }[]) {
-    const project = projectById.get(row.project_id);
-    if (project) attach(row.person_id, row.project_role === "pm" ? "PM" : row.project_role === "pl" ? "PL" : "참여", project);
+  // 집계는 erp_partner_board 뷰가 한다 (security_invoker 라 RLS 는 그대로 적용된다).
+  const { data, error } = await supabase.from("erp_partner_board").select("*").limit(5000);
+  if (error) {
+    console.error("getPartnerBoard", error.message);
+    return [];
   }
 
-  const docCount = new Map<string, number>();
-  for (const row of (docRes.data ?? []) as { entity_id: string }[]) {
-    docCount.set(row.entity_id, (docCount.get(row.entity_id) ?? 0) + 1);
-  }
+  warnIfCapped("파트너 보드", data, 5000);
+  const rows = ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => {
+    const partnerStatus = (row.partner_status as string) ?? null;
+    const segment = (row.network_segment as string) ?? null;
+    const docCount = Number(row.doc_count ?? 0);
 
-  const rows: PartnerBoardRow[] = ((peopleRes.data ?? []) as unknown as Record<string, unknown>[]).map((row) => {
-    const id = row.id as string;
-    const company = one(row.company as { name_ko: string } | { name_ko: string }[]);
-    const profile = one(
-      row.profile as Record<string, string | null> | Record<string, string | null>[]
-    );
-    const stat = acc.get(id);
-    const docs = docCount.get(id) ?? 0;
-
-    const partnerStatus = profile?.partner_status ?? null;
-    const segment = profile?.network_segment ?? null;
     const evidence: PartnerEvidence[] = [];
-    if (stat && stat.projectIds.size > 0) evidence.push("project");
+    if (Number(row.project_count ?? 0) > 0) evidence.push("project");
     if (
-      docs > 0 ||
-      DONE_DOC.has(profile?.nda_status ?? "") ||
-      DONE_DOC.has(profile?.profile_status ?? "") ||
-      DONE_DOC.has(profile?.appointment_status ?? "")
+      docCount > 0 ||
+      DONE_DOC.has((row.nda_status as string) ?? "") ||
+      DONE_DOC.has((row.profile_status as string) ?? "") ||
+      DONE_DOC.has((row.appointment_status as string) ?? "")
     ) {
       evidence.push("document");
     }
@@ -1139,26 +1096,26 @@ export async function getPartnerBoard(): Promise<PartnerBoardRow[]> {
     if (partnerStatus && partnerStatus.trim()) evidence.push("label");
 
     return {
-      id,
-      name: row.name_ko as string,
-      company: company?.name_ko ?? null,
+      id: row.id as string,
+      name: row.name as string,
+      company: (row.company as string) ?? null,
       title: (row.title as string) ?? null,
       email: (row.email as string) ?? null,
       phone: (row.phone as string) ?? null,
       partner_status: partnerStatus,
       network_segment: segment,
-      nda_status: profile?.nda_status ?? null,
-      profile_status: profile?.profile_status ?? null,
-      appointment_status: profile?.appointment_status ?? null,
-      projectCount: stat?.projectIds.size ?? 0,
-      roles: Array.from(stat?.roles ?? []),
-      contractCount: stat?.contract ?? 0,
-      negotiationCount: stat?.negotiation ?? 0,
-      docCount: docs,
-      lastLabel: stat?.lastLabel ?? null,
-      lastDate: stat?.lastDate ?? null,
+      nda_status: (row.nda_status as string) ?? null,
+      profile_status: (row.profile_status as string) ?? null,
+      appointment_status: (row.appointment_status as string) ?? null,
+      projectCount: Number(row.project_count ?? 0),
+      roles: ((row.roles as string[]) ?? []).filter(Boolean),
+      contractCount: Number(row.contract_count ?? 0),
+      negotiationCount: Number(row.negotiation_count ?? 0),
+      docCount,
+      lastLabel: (row.last_label as string) ?? null,
+      lastDate: (row.last_date as string) ?? null,
       evidence,
-    };
+    } satisfies PartnerBoardRow;
   });
 
   return rows

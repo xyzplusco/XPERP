@@ -30,7 +30,7 @@ npm run dev                  # http://localhost:3000
 |---|---|
 | 아키텍처 | Next.js 16.3 (App Router, RSC + Server Actions) + Supabase (Auth/DB/Storage) |
 | 배포 | Vercel, 함수 리전 도쿄(`hnd1`) 고정. GitHub `xyzplusco/XPERP` push 시 자동 배포 |
-| DB 스키마 | 마이그레이션 10건 전부 라이브 적용 완료 (2026-08-20 확인) |
+| DB 스키마 | 마이그레이션 13건 전부 라이브 적용 완료 (2026-08-21 확인) |
 | 인증 | Supabase Auth 이메일/비밀번호. `proxy.ts` 세션 가드 |
 | 권한 | owner / staff / member / viewer 4단계, RLS로 DB 레벨 강제 (§2) |
 | 문서 저장 | Storage `xp-documents`, `xp-meeting-notes` (private, signed URL) |
@@ -174,13 +174,29 @@ components/InviteeLookup.tsx # 이벤트 참석자 파트너 검색 추가 + 인
 components/InviteeManager.tsx / MeetingNotesPanel / DocumentsPanel / DealTable / SaveNotice
 
 scripts/                     # 엑셀 왕복·마이그레이션·계약 임포트·계정 생성 (§5)
-supabase/migrations/         # 10건, 전부 라이브 적용됨
+supabase/migrations/         # 13건, 전부 라이브 적용됨
 docs/permissions-plan.md     # 권한 재설계 기획
 docs/ux-roadmap.md           # UX 로드맵 1~3단계
+docs/schema-inventory.md     # 테이블별 운영/파생/이력/폐기 분류 — 스키마 건드리기 전에 읽을 것
 ```
 
 삭제된 것 (구 버전): `app/network`, `app/search`, `components/CustomerTable|DataTable|SectionHeader`,
 `lib/operational-data.ts` → `_to_delete/` 로 이동. 폴더째 지워도 된다.
+
+## 3.3 관계 정본 (2026-08-21)
+
+같은 사실을 두 곳에 쓰지 않는다. **파생 쪽은 트리거가 따라가므로 직접 쓰지 말 것.**
+
+| 관계 | 정본 | 파생 |
+|---|---|---|
+| 프로젝트 담당 | `projects.primary_pl_person_id` / `secondary_pl` / `candidate_pm` | `project_members` 의 `pl`·`pm` 행 |
+| 파트너 소속 | `people.primary_company_id` | `person_company_links` 의 `is_primary` 행 |
+
+`project_members` 의 `external_contributor`·`coordinator`·`viewer` 역할은 파생이 아니라
+독립적인 사실이므로 트리거가 건드리지 않는다. 외부 기여자 관리는 그쪽을 쓰면 된다.
+
+테이블별 성격(운영·파생·이력 전용·폐기 후보)은 `docs/schema-inventory.md` 에 있다.
+**스키마를 지우기 전에 반드시 읽을 것.**
 
 ## 3.4 알림 구조
 
@@ -326,6 +342,15 @@ staff·owner 용 화면으로 볼 것.
   페이지마다 인증 왕복이 한 번씩 더 붙는다. (위조 토큰은 어차피 RLS에서 막힌다)
 - `vercel.json` 의 `regions: ["hnd1"]` 을 지우지 말 것. Supabase 가 도쿄라 기본값 iad1 로 돌아가면
   요청마다 태평양을 왕복한다.
+- signed URL 을 파일마다 순차 발급하지 말 것. `signMany()` 로 버킷당 한 번에 서명한다.
+- 파트너 보드 집계를 앱으로 되돌리지 말 것. `erp_partner_board` 뷰가 한다(`security_invoker`).
+
+### 파일 접근은 Storage RLS 로 막힌다
+
+업로드 경로는 `<entity_type>/<entity_id>/파일명` 규칙이고, `xp_storage_scope_allowed()` 가
+이 경로를 파싱해 프로젝트/고객사 범위를 검사한다. **경로 규칙을 바꾸면 접근 통제가 깨진다.**
+규칙에서 벗어난 경로는 막히는 쪽으로 동작한다(fail closed).
+앱이 서버에서만 signed URL 을 발급하는 것과 별개로, RLS 는 앱을 우회한 직접 접근을 막는 마지막 선이다.
 
 ### 디자인 규칙 (변경 금지)
 

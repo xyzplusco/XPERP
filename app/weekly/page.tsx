@@ -10,9 +10,9 @@ export const dynamic = "force-dynamic";
 export default async function WeeklyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ label?: string; saved?: string; cleared?: string; error?: string }>;
+  searchParams: Promise<{ label?: string; saved?: string; cleared?: string; failed?: string; error?: string }>;
 }) {
-  const { label, saved, cleared, error } = await searchParams;
+  const { label, saved, cleared, failed, error } = await searchParams;
   const user = await requireUser();
 
   const weeks = recentWeeks(8);
@@ -32,10 +32,14 @@ export default async function WeeklyPage({
       </div>
 
       {saved || cleared ? (
-        <p className="notice noticeOk">
-          {saved && Number(saved) > 0 ? `${saved}건 저장` : ""}
-          {cleared && Number(cleared) > 0 ? `${saved && Number(saved) > 0 ? " · " : ""}${cleared}건 삭제` : ""}
-          {(!saved || Number(saved) === 0) && (!cleared || Number(cleared) === 0) ? "변경 없음" : ""}
+        <p className={Number(failed ?? 0) > 0 ? "notice noticeError" : "notice noticeOk"}>
+          {[
+            Number(saved ?? 0) > 0 ? `${saved}건 저장` : null,
+            Number(cleared ?? 0) > 0 ? `${cleared}건 삭제` : null,
+            Number(failed ?? 0) > 0 ? `${failed}건 실패` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "변경 없음"}
         </p>
       ) : null}
       <SaveNotice error={error} />

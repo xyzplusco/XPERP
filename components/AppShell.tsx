@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { navigationItems } from "@/lib/navigation";
+import { navigationFor } from "@/lib/navigation";
 import { signOutAction } from "@/lib/actions";
-import { label } from "@/lib/labels";
-import type { SessionUser } from "@/lib/auth";
+
+import { ROLE_LABEL, type SessionUser } from "@/lib/auth";
 import { NavLinks } from "@/components/NavLinks";
 import { TicketDialog } from "@/components/TicketDialog";
 import { getAssignablePeople, getProjectOptions } from "@/lib/queries";
@@ -19,14 +19,14 @@ export async function AppShell({ user, children }: { user: SessionUser; children
           <img src="/logo.png" alt="XP" className="brandLogo" />
         </Link>
         <nav className="navList">
-          <NavLinks items={navigationItems} />
+          <NavLinks items={navigationFor(user)} />
         </nav>
         <div className="sidebarActions">
           <TicketDialog assignables={assignables} projects={projects} />
         </div>
         <div className="sidebarFooter">
           <div className="userEmail">{user.personName ?? user.email}</div>
-          <div>{label(user.role)}</div>
+          <div>{ROLE_LABEL[user.role] ?? user.role}</div>
           <form action={signOutAction}>
             <button className="logoutButton" type="submit">
               로그아웃

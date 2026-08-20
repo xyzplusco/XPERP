@@ -962,3 +962,206 @@ export async function getWeeklyBoard(personId: string | null, label: string, pre
 export async function getLastUpdateMap(projectIds: string[]) {
   return lastUpdateByProject(projectIds);
 }
+
+// ── 이벤트 참석자 검색용 경량 명부 ──────────────────────────────────────────
+export type DirectoryPerson = {
+  id: string;
+  name: string;
+  company: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+};
+
+export async function getPeopleDirectory(): Promise<DirectoryPerson[]> {
+  const supabase = await createSupabaseServer();
+  const { data, error } = await supabase
+    .from("people")
+    .select("id, name_ko, title, email, phone, company:companies!people_primary_company_id_fkey(name_ko)")
+    .is("deleted_at", null)
+    .order("name_ko", { ascending: true })
+    .limit(2000);
+  if (error) {
+    console.error("getPeopleDirectory", error.message);
+    return [];
+  }
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => {
+    const company = one(row.company as { name_ko: string } | { name_ko: string }[]);
+    return {
+      id: row.id as string,
+      name: row.name_ko as string,
+      company: company?.name_ko ?? null,
+      title: (row.title as string) ?? null,
+      email: (row.email as string) ?? null,
+      phone: (row.phone as string) ?? null,
+    };
+  });
+}
+
+// ── 파트너 관리 보드 ────────────────────────────────────────────────────────
+// 라벨(partner_status)이 382명 미분류이므로 라벨로 거르지 않는다.
+// 프로젝트 배정 · 문서 보유 · 네트워크 분류 · 라벨 중 하나라도 있으면 '활동'으로 본다.
+export type PartnerEvidence = "project" | "document" | "segment" | "label";
+
+export type PartnerBoardRow = {
+  id: string;
+  name: string;
+  company: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  partner_status: string | null;
+  network_segment: string | null;
+  nda_status: string | null;
+  profile_status: string | null;
+  appointment_status: string | null;
+  projectCount: number;
+  roles: string[];
+  contractCount: number;
+  negotiationCount: number;
+  docCount: number;
+  lastLabel: string | null;
+  lastDate: string | null;
+  evidence: PartnerEvidence[];
+};
+
+const DONE_DOC = new Set(["O", "Y", "완료"]);
+
+export async function getPartnerBoard(): Promise<PartnerBoardRow[]> {
+  const supabase = await createSupabaseServer();
+
+  const [peopleRes, projectRes, memberRes, docRes] = await Promise.all([
+    supabase
+      .from("people")
+      .select(
+        "id, name_ko, title, email, phone, " +
+          "company:companies!people_primary_company_id_fkey(name_ko), " +
+          "profile:network_profiles(network_segment, partner_status, nda_status, profile_status, appointment_status)"
+      )
+      .is("deleted_at", null)
+      .limit(2000),
+    supabase
+      .from("projects")
+      .select(
+        "id, name, status, contract_status, primary_pl_person_id, secondary_pl_person_id, candidate_pm_person_id"
+      )
+      .is("deleted_at", null)
+      .limit(1000),
+    supabase.from("project_members").select("project_id, person_id, project_role").limit(2000),
+    supabase.from("entity_documents").select("entity_id").eq("entity_type", "person").limit(2000),
+  ]);
+
+  const projects = (projectRes.data ?? []) as {
+    id: string;
+    name: string;
+    status: string;
+    contract_status: string | null;
+    primary_pl_person_id: string | null;
+    secondary_pl_person_id: string | null;
+    candidate_pm_person_id: string | null;
+  }[];
+
+  const lastMap = await lastUpdateByProject(projects.map((p) => p.id));
+
+  type Acc = {
+    projectIds: Set<string>;
+    roles: Set<string>;
+    contract: number;
+    negotiation: number;
+    lastLabel: string | null;
+    lastDate: string | null;
+  };
+  const acc = new Map<string, Acc>();
+  const bucket = (personId: string) => {
+    let value = acc.get(personId);
+    if (!value) {
+      value = { projectIds: new Set(), roles: new Set(), contract: 0, negotiation: 0, lastLabel: null, lastDate: null };
+      acc.set(personId, value);
+    }
+    return value;
+  };
+
+  const attach = (personId: string | null, role: string, project: (typeof projects)[number]) => {
+    if (!personId) return;
+    const value = bucket(personId);
+    value.roles.add(role);
+    if (value.projectIds.has(project.id)) return;
+    value.projectIds.add(project.id);
+    if (project.contract_status === "계약" || project.status === "confirmed") value.contract += 1;
+    if (project.contract_status === "협상" || project.status === "discussing" || project.status === "likely") {
+      value.negotiation += 1;
+    }
+    const last = lastMap.get(project.id);
+    if (last?.date && (!value.lastDate || last.date > value.lastDate)) {
+      value.lastDate = last.date;
+      value.lastLabel = last.label;
+    }
+  };
+
+  const projectById = new Map(projects.map((p) => [p.id, p]));
+  for (const project of projects) {
+    attach(project.primary_pl_person_id, "PL", project);
+    attach(project.secondary_pl_person_id, "PL", project);
+    attach(project.candidate_pm_person_id, "PM", project);
+  }
+  for (const row of (memberRes.data ?? []) as { project_id: string; person_id: string; project_role: string }[]) {
+    const project = projectById.get(row.project_id);
+    if (project) attach(row.person_id, row.project_role === "pm" ? "PM" : row.project_role === "pl" ? "PL" : "참여", project);
+  }
+
+  const docCount = new Map<string, number>();
+  for (const row of (docRes.data ?? []) as { entity_id: string }[]) {
+    docCount.set(row.entity_id, (docCount.get(row.entity_id) ?? 0) + 1);
+  }
+
+  const rows: PartnerBoardRow[] = ((peopleRes.data ?? []) as unknown as Record<string, unknown>[]).map((row) => {
+    const id = row.id as string;
+    const company = one(row.company as { name_ko: string } | { name_ko: string }[]);
+    const profile = one(
+      row.profile as Record<string, string | null> | Record<string, string | null>[]
+    );
+    const stat = acc.get(id);
+    const docs = docCount.get(id) ?? 0;
+
+    const partnerStatus = profile?.partner_status ?? null;
+    const segment = profile?.network_segment ?? null;
+    const evidence: PartnerEvidence[] = [];
+    if (stat && stat.projectIds.size > 0) evidence.push("project");
+    if (
+      docs > 0 ||
+      DONE_DOC.has(profile?.nda_status ?? "") ||
+      DONE_DOC.has(profile?.profile_status ?? "") ||
+      DONE_DOC.has(profile?.appointment_status ?? "")
+    ) {
+      evidence.push("document");
+    }
+    if (segment && segment !== "unknown") evidence.push("segment");
+    if (partnerStatus && partnerStatus.trim()) evidence.push("label");
+
+    return {
+      id,
+      name: row.name_ko as string,
+      company: company?.name_ko ?? null,
+      title: (row.title as string) ?? null,
+      email: (row.email as string) ?? null,
+      phone: (row.phone as string) ?? null,
+      partner_status: partnerStatus,
+      network_segment: segment,
+      nda_status: profile?.nda_status ?? null,
+      profile_status: profile?.profile_status ?? null,
+      appointment_status: profile?.appointment_status ?? null,
+      projectCount: stat?.projectIds.size ?? 0,
+      roles: Array.from(stat?.roles ?? []),
+      contractCount: stat?.contract ?? 0,
+      negotiationCount: stat?.negotiation ?? 0,
+      docCount: docs,
+      lastLabel: stat?.lastLabel ?? null,
+      lastDate: stat?.lastDate ?? null,
+      evidence,
+    };
+  });
+
+  return rows
+    .filter((row) => row.evidence.length > 0)
+    .sort((a, b) => b.projectCount - a.projectCount || a.name.localeCompare(b.name, "ko"));
+}

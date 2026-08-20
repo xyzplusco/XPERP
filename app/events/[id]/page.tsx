@@ -4,7 +4,7 @@ import { DocumentsPanel } from "@/components/DocumentsPanel";
 import { InviteeManager, type Invitee } from "@/components/InviteeManager";
 import { SaveNotice } from "@/components/SaveNotice";
 import { updateEventAction } from "@/lib/actions";
-import { getEvent } from "@/lib/queries";
+import { getEvent, getPeopleDirectory } from "@/lib/queries";
 import { EVENT_STATUS_OPTIONS, formatDateTime, label } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export default async function EventDetailPage({
 }) {
   const { id } = await params;
   const { saved, error } = await searchParams;
-  const data = await getEvent(id);
+  const [data, people] = await Promise.all([getEvent(id), getPeopleDirectory()]);
   if (!data) notFound();
 
   const { event, invitees, documents } = data;
@@ -56,7 +56,7 @@ export default async function EventDetailPage({
 
       <SaveNotice saved={saved} error={error} />
 
-      <InviteeManager eventId={id} invitees={invitees as unknown as Invitee[]} />
+      <InviteeManager eventId={id} invitees={invitees as unknown as Invitee[]} people={people} />
 
       <DocumentsPanel
         entityType="event"

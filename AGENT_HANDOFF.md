@@ -43,13 +43,54 @@ npm run db:migrate:api   # Management API 경유 (SUPABASE_ACCESS_TOKEN 필요, 
 
 둘 다 같은 `schema_migrations` 테이블을 쓰므로 섞어 써도 안전하다.
 
-## 2. 권한 모델
+## 2. 권한 모델 (2026-08-19 재설계)
 
-- `users` 테이블이 Supabase Auth와 ERP를 연결: `auth_user_id` (auth.users FK), `global_role`, `person_id`.
-- 읽기: **users 행이 있는 활성 계정만** 전체 열람 가능 (`xp_is_member()`).
-- 쓰기: admin은 전부. PL/PM은 `xp_can_edit_project()` 판정 — projects의 primary/secondary PL, candidate PM이거나 project_members에 pl/pm/owner/coordinator로 등록된 사람.
-- PL/PM이 편집 가능한 것: 프로젝트 필드, 진행 업데이트 추가, 액션(tasks) 추가/수정, 프로젝트 연결 문서 요구사항.
-- 계정 생성: `npm run user:create -- --email .. --password .. --role member --person "이름"` (auth.users에 직접 insert, 이메일 확인 불필요). `--person`으로 people 행과 연결해야 PL/PM 권한이 산다.
+기획: `docs/permissions-plan.md` · 마이그레이션: `20260819000000_role_model.sql`
+
+### 역할 4단계
+
+| 역할 | 열람 | 쓰기 | 계정 관리 |
+|---|---|---|---|
+| `owner` 마스터 어드민 | 전부 | 전부 + 영구삭제 | 가능 (1명만, DB에서 강제) |
+| `staff` 임직원 | 전부 | 전부 | 불가 |
+| `member` PL/PM | **자기 프로젝트 범위만** | 자기 프로젝트만 | 불가 |
+| `viewer` 열람전용 | 전부 | **없음** | 불가 |
+
+### member 가 보는 범위 (RLS 로 강제)
+
+- 프로젝트: `xp_my_project_ids()` — PL·PM·구성원인 것만
+- 주차 업데이트 / 구성원 / 회의록: 그 프로젝트 것만
+- 고객사: `xp_my_company_ids()` — 내 프로젝트의 고객사만
+- 문서·필요문서: 내 프로젝트/고객사 것만
+- **파트너 명부·이벤트: 전사 공개** (의도된 결정 — 네트워크가 XP 핵심 자산)
+- 티켓: 내 프로젝트 것 + **미분류 전체** + 내가 담당/생성한 것
+- 계정 목록: 본인 것만 / 활동로그·임포트 이력: owner·staff 만
+- **매출 금액: 앱에서 숨김** (RLS는 행 단위라 열 숨김은 앱 레이어. 완전 차단하려면 뷰 분리 필요)
+
+### 실측 검증 (2026-08-19, 임시 계정으로 확인 후 삭제)
+
+| 역할 | 프로젝트 | 고객사 | 파트너 | 주차업데이트 | 계정 | 활동로그 | 쓰기 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| member (정홍재) | 15 | 12 | 427 | 37 | 1 | 0 | 가능 |
+| staff | 197 | 463 | 427 | 413 | 4 | 536 | 가능 |
+| viewer | 197 | 463 | 427 | 413 | 1 | 0 | **403 차단** |
+
+### 헬퍼 함수
+
+`xp_role()` `xp_is_owner()` `xp_is_admin()`(=owner+staff) `xp_can_see_all()`(=+viewer)
+`xp_can_write()`(=viewer 제외) `xp_my_project_ids()` `xp_my_company_ids()`
+
+### 계정 생성 — 화면에서
+
+**설정 → 계정 추가** (마스터 어드민만). 이메일·연결 파트너·역할을 고르면 임시 비밀번호가
+생성 직후 한 번만 표시된다. 비밀번호 재설정·비활성화·삭제도 같은 화면.
+
+**전제: `SUPABASE_SERVICE_ROLE_KEY` 서버 환경변수 필요** (Auth 사용자 생성에 admin API 필요).
+`NEXT_PUBLIC_` 접두어를 붙이면 안 되고, `lib/supabase/admin.ts` 를 통해 server action 안에서만 쓴다.
+키가 없으면 설정 화면이 안내 문구를 띄우고 생성 기능만 비활성화된다.
+
+비상용으로 터미널 스크립트도 유지: `npm run user:create -- --email .. --password .. --role member --person "이름"`
+(owner 계정을 잃었을 때의 복구 경로이므로 지우지 말 것)
 
 ## 3. 앱 구조
 
@@ -63,11 +104,13 @@ lib/labels.ts                # 상태값 한국어 라벨, 파트너 구분 로�
 app/page.tsx                 # 대시보드 (통계 + Deal List)
 app/customers[/[id]]         # 고객사 목록/상세 (기업정보, 프로젝트, 담당자, 문서, 편집)
 app/partners[/[id]]          # 파트너 목록/상세 (구분 필터, 참여 프로젝트, NDA/프로필/위촉, 문서, 편집)
+app/partners/board           # 파트너 관리 보드 (라벨이 아니라 근거로 활동 파트너 판정 + 일괄 분류)
 app/projects[/[id]]          # 프로젝트 목록/상세 (개요, 업데이트 타임라인, 액션, 구성원, 문서, 편집)
 app/events[/[id]]            # 이벤트 목록/상세
 app/documents                # 문서 레지스트리 (보관 + 미비)
 app/settings                 # 계정 관리 (admin)
-components/                  # AppShell, NavLinks, DealTable, DocumentsPanel, SaveNotice
+components/                  # AppShell, NavLinks, DealTable, DocumentsPanel, SaveNotice,
+                             # BulkTable(대량/인라인 편집), InviteeManager + InviteeLookup(참석자 검색 추가)
 ```
 
 삭제된 것 (구 버전): `app/network`, `app/search`, `components/CustomerTable|DataTable|SectionHeader`, `lib/operational-data.ts` → `_to_delete/`로 이동됨. 확인 후 폴더째 삭제하면 됨.
@@ -96,6 +139,17 @@ npm run db:import -- --file <파일> --apply           # 실제 반영
 시트/열 정의는 `scripts/lib/workbook_schema.mjs` 한 곳에서 관리한다. 열을 추가하려면 여기만 고치면 export/import가 함께 따라간다.
 ID 열이 매칭 키이며 비어 있으면 신규 등록. 삭제는 '삭제'=Y 열로만 처리한다.
 변경 전후는 `activity_logs` 에 기록되므로 추적/복구가 가능하다.
+
+## 4.6 UX 로드맵 진행 상황
+
+계획서: `docs/ux-roadmap.md`
+
+- 1단계 완료 — 홈=내 업무, 주간 업데이트 작성 플로우(`/weekly`), 마지막 업데이트 열 + 정체 필터
+- 2단계 완료 (2026-08-20) — 프로젝트 아카이브, 이벤트 참석자 검색 추가, 파트너 관리 보드
+- 3단계 미착수 — 저장된 목록 뷰, 칸반, PL 미배정 큐(46건), 활동 타임라인 통합
+
+파트너 관리 보드는 `projects` 를 읽으므로 member 계정에서는 '참여 프로젝트'가 본인 것만 집계된다.
+staff·owner 용 화면으로 볼 것.
 
 ## 5. 다음 작업 우선순위 (미완)
 

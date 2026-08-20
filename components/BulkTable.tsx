@@ -22,6 +22,8 @@ export type BulkRow = {
   raw?: Record<string, string>;
   href?: string;
   linkKey?: string;
+  // 굵게 표시할 열 (부하 경고 등). 아이콘·색 없이 굵기로만 강조한다.
+  emphasis?: string[];
 };
 
 export type BulkAction = {
@@ -226,7 +228,12 @@ export function BulkTable({
                             {shown || "–"}
                           </Link>
                         ) : (
-                          <span className={shown ? undefined : "faintText"}>{shown || "–"}</span>
+                          <span
+                            className={shown ? undefined : "faintText"}
+                            style={row.emphasis?.includes(column.key) ? { fontWeight: 700 } : undefined}
+                          >
+                            {shown || "–"}
+                          </span>
                         )}
                         {flashing ? <span className="cellFlash">{flash.text}</span> : null}
                       </td>

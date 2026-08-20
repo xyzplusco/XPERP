@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/auth";
+import { canSeeRevenue, getSessionUser, isAdmin, isOwner } from "@/lib/auth";
+import { createSupabaseAdmin, generatePassword } from "@/lib/supabase/admin";
 import {
   EDITABLE,
   ENTITY_PATH,
@@ -63,11 +64,14 @@ export async function updateProjectAction(projectId: string, formData: FormData)
     end_date: text(formData, "end_date"),
   };
 
-  const revenue = text(formData, "expected_revenue");
-  payload.expected_revenue = revenue === null ? null : Number(revenue.replace(/,/g, ""));
-  if (Number.isNaN(payload.expected_revenue)) payload.expected_revenue = null;
+  // 매출은 전사 열람 권한이 있는 역할만 수정할 수 있다 (PL/PM 화면에는 아예 없음)
+  if (formData.has("expected_revenue") && canSeeRevenue(user)) {
+    const revenue = text(formData, "expected_revenue");
+    payload.expected_revenue = revenue === null ? null : Number(revenue.replace(/,/g, ""));
+    if (Number.isNaN(payload.expected_revenue)) payload.expected_revenue = null;
+  }
 
-  if (user?.role === "admin") {
+  if (isAdmin(user)) {
     const type = text(formData, "project_type");
     if (type) payload.project_type = type;
     if (formData.has("folder_id")) payload.folder_id = text(formData, "folder_id");
@@ -153,7 +157,7 @@ export async function setTaskStatusAction(taskId: string, status: string, return
 
 export async function updateCustomerAction(companyId: string, formData: FormData) {
   const user = await getSessionUser();
-  if (user?.role !== "admin") redirect(`/customers/${companyId}?error=forbidden`);
+  if (!isAdmin(user)) redirect(`/customers/${companyId}?error=forbidden`);
 
   const supabase = await createSupabaseServer();
   const { error } = await supabase
@@ -181,7 +185,7 @@ export async function updateCustomerAction(companyId: string, formData: FormData
 
 export async function updatePartnerAction(personId: string, formData: FormData) {
   const user = await getSessionUser();
-  if (user?.role !== "admin") redirect(`/partners/${personId}?error=forbidden`);
+  if (!isAdmin(user)) redirect(`/partners/${personId}?error=forbidden`);
 
   const supabase = await createSupabaseServer();
 
@@ -300,13 +304,13 @@ export async function uploadDocumentAction(formData: FormData) {
 
 export async function updateUserAction(userId: string, formData: FormData) {
   const user = await getSessionUser();
-  if (user?.role !== "admin") redirect("/settings?error=forbidden");
+  if (!isOwner(user)) redirect("/settings?error=forbidden");
 
   const supabase = await createSupabaseServer();
   const payload: Record<string, string | null> = {};
 
   const role = text(formData, "global_role");
-  if (role && ["admin", "partner", "member", "external_contributor"].includes(role)) {
+  if (role && ["owner", "staff", "member", "viewer"].includes(role)) {
     payload.global_role = role;
   }
   const status = text(formData, "status");
@@ -542,7 +546,7 @@ export async function deleteTicketAction(ticketId: string, returnPath: string) {
 
 export async function setProjectFolderAction(projectId: string, formData: FormData) {
   const user = await getSessionUser();
-  if (user?.role !== "admin") redirect(`/projects/${projectId}?error=forbidden`);
+  if (!isAdmin(user)) redirect(`/projects/${projectId}?error=forbidden`);
 
   const supabase = await createSupabaseServer();
   const { error } = await supabase
@@ -672,7 +676,7 @@ async function assertAdminFor(entity: EntityKey, field: string) {
     : EDITABLE[entity][field];
   if (!spec?.adminOnly) return true;
   const user = await getSessionUser();
-  return user?.role === "admin";
+  return isAdmin(user);
 }
 
 // 셀 하나를 바로 수정한다.
@@ -794,7 +798,7 @@ export async function restoreAction(entity: string, id: string) {
 
 export async function purgeAction(entity: string, id: string) {
   const user = await getSessionUser();
-  if (user?.role !== "admin") redirect("/trash?error=forbidden");
+  if (!isOwner(user)) redirect("/trash?error=forbidden");
   if (!isValidEntity(entity)) redirect("/trash?error=save");
 
   const supabase = await createSupabaseServer();
@@ -809,7 +813,7 @@ export async function purgeAction(entity: string, id: string) {
 
 export async function emptyTrashAction(entity: string) {
   const user = await getSessionUser();
-  if (user?.role !== "admin") redirect("/trash?error=forbidden");
+  if (!isOwner(user)) redirect("/trash?error=forbidden");
   if (!isValidEntity(entity)) redirect("/trash?error=save");
 
   const supabase = await createSupabaseServer();
@@ -895,4 +899,220 @@ export async function saveWeeklyUpdatesAction(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/projects");
   redirect(`/weekly?label=${encodeURIComponent(label)}&saved=${saved}&cleared=${cleared}`);
+}
+
+// ---------------------------------------------------------------- 계정 관리 (마스터 어드민)
+
+export async function createAccountAction(formData: FormData) {
+  const owner = await getSessionUser();
+  if (!isOwner(owner)) redirect("/settings?error=forbidden");
+
+  const admin = createSupabaseAdmin();
+  if (!admin) redirect("/settings?error=nokey");
+
+  const email = text(formData, "email")?.toLowerCase();
+  const role = text(formData, "global_role") ?? "member";
+  const personName = text(formData, "person_name");
+  const customPassword = text(formData, "password");
+
+  if (!email || !email.includes("@")) redirect("/settings?error=email");
+  if (!["owner", "staff", "member", "viewer"].includes(role)) redirect("/settings?error=save");
+  if (role === "owner") redirect("/settings?error=owner");
+
+  const supabase = await createSupabaseServer();
+
+  let personId: string | null = null;
+  if (personName) {
+    const { data } = await supabase.from("people").select("id").eq("name_ko", personName).limit(2);
+    if (!data || data.length === 0) redirect("/settings?error=person");
+    if (data.length > 1) redirect("/settings?error=duplicate");
+    personId = data[0].id;
+  }
+
+  const password = customPassword && customPassword.length >= 8 ? customPassword : generatePassword();
+
+  const { data: created, error: authError } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (authError || !created?.user) {
+    console.error("createAccountAction auth", authError?.message);
+    redirect(`/settings?error=${authError?.message?.includes("already") ? "exists" : "save"}`);
+  }
+
+  const { error: rowError } = await admin.from("users").insert({
+    email,
+    global_role: role,
+    status: "active",
+    auth_user_id: created.user.id,
+    person_id: personId,
+  });
+  if (rowError) {
+    // 계정 행 생성이 실패하면 Auth 사용자도 되돌린다 (고아 계정 방지)
+    await admin.auth.admin.deleteUser(created.user.id);
+    console.error("createAccountAction row", rowError.message);
+    redirect("/settings?error=save");
+  }
+
+  revalidatePath("/settings");
+  redirect(`/settings?created=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`);
+}
+
+export async function resetPasswordAction(userId: string) {
+  const owner = await getSessionUser();
+  if (!isOwner(owner)) redirect("/settings?error=forbidden");
+
+  const admin = createSupabaseAdmin();
+  if (!admin) redirect("/settings?error=nokey");
+
+  const { data: row } = await admin.from("users").select("email, auth_user_id").eq("id", userId).maybeSingle();
+  if (!row?.auth_user_id) redirect("/settings?error=save");
+
+  const password = generatePassword();
+  const { error } = await admin.auth.admin.updateUserById(row.auth_user_id as string, { password });
+  if (error) {
+    console.error("resetPasswordAction", error.message);
+    redirect("/settings?error=save");
+  }
+
+  revalidatePath("/settings");
+  redirect(`/settings?created=${encodeURIComponent(row.email as string)}&password=${encodeURIComponent(password)}&reset=1`);
+}
+
+export async function deleteAccountAction(userId: string) {
+  const owner = await getSessionUser();
+  if (!isOwner(owner)) redirect("/settings?error=forbidden");
+  if (owner?.appUserId === userId) redirect("/settings?error=self");
+
+  const admin = createSupabaseAdmin();
+  if (!admin) redirect("/settings?error=nokey");
+
+  const { data: row } = await admin.from("users").select("auth_user_id, global_role").eq("id", userId).maybeSingle();
+  if (row?.global_role === "owner") redirect("/settings?error=owner");
+
+  await admin.from("users").delete().eq("id", userId);
+  if (row?.auth_user_id) await admin.auth.admin.deleteUser(row.auth_user_id as string);
+
+  revalidatePath("/settings");
+  redirect("/settings?saved=1");
+}
+
+// ── 이벤트 참석자: 파트너 DB 검색 추가 / 인라인 신규 등록 ────────────────────
+type InviteeResult = { ok: boolean; message: string };
+
+export async function addInviteeFromPersonAction(
+  eventId: string,
+  personId: string
+): Promise<InviteeResult> {
+  const supabase = await createSupabaseServer();
+  const user = await getSessionUser();
+
+  const { data: person } = await supabase
+    .from("people")
+    .select("id, name_ko, title, email, phone, company:companies!people_primary_company_id_fkey(name_ko)")
+    .eq("id", personId)
+    .maybeSingle();
+  if (!person) return { ok: false, message: "파트너를 찾을 수 없습니다" };
+
+  const { data: existing } = await supabase
+    .from("event_invitees")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("person_id", personId)
+    .limit(1);
+  if (existing && existing.length > 0) {
+    return { ok: false, message: `${person.name_ko} 은(는) 이미 명단에 있습니다` };
+  }
+
+  const company = person.company as { name_ko: string } | { name_ko: string }[] | null;
+  const companyName = Array.isArray(company) ? company[0]?.name_ko ?? null : company?.name_ko ?? null;
+
+  const { error } = await supabase.from("event_invitees").insert({
+    event_id: eventId,
+    person_id: person.id,
+    name: person.name_ko,
+    company_name: companyName,
+    title: person.title ?? null,
+    email: person.email ?? null,
+    phone: person.phone ?? null,
+    owner_user_id: user?.appUserId ?? null,
+  });
+  if (error) {
+    console.error("addInviteeFromPersonAction", error.message);
+    return { ok: false, message: "추가하지 못했습니다" };
+  }
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true, message: `${person.name_ko} 추가됨` };
+}
+
+export async function createPersonAndInviteAction(
+  eventId: string,
+  input: { name: string; company: string; title: string; email: string; phone: string }
+): Promise<InviteeResult> {
+  const supabase = await createSupabaseServer();
+  const user = await getSessionUser();
+
+  const name = input.name.trim();
+  if (!name) return { ok: false, message: "이름을 입력하세요" };
+
+  const clean = (value: string) => {
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+  };
+  const companyName = clean(input.company);
+
+  // 소속이 기존 고객사와 정확히 일치하면 연결한다. 없으면 회사 행은 만들지 않는다.
+  let companyId: string | null = null;
+  if (companyName) {
+    const { data: matched } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("name_ko", companyName)
+      .is("deleted_at", null)
+      .limit(2);
+    if (matched && matched.length === 1) companyId = matched[0].id;
+  }
+
+  const { data: created, error: personError } = await supabase
+    .from("people")
+    .insert({
+      name_ko: name,
+      title: clean(input.title),
+      email: clean(input.email),
+      phone: clean(input.phone),
+      primary_company_id: companyId,
+      source: "event_invitee",
+    })
+    .select("id")
+    .single();
+
+  if (personError || !created) {
+    console.error("createPersonAndInviteAction/person", personError?.message);
+    return { ok: false, message: "파트너를 만들지 못했습니다" };
+  }
+
+  // 프로필이 없으면 파트너 목록/보드에서 구분을 못 잡으므로 함께 만든다.
+  const { error: profileError } = await supabase
+    .from("network_profiles")
+    .insert({ person_id: created.id, network_segment: "event_invitee" });
+  if (profileError) console.error("createPersonAndInviteAction/profile", profileError.message);
+
+  const { error } = await supabase.from("event_invitees").insert({
+    event_id: eventId,
+    person_id: created.id,
+    name,
+    company_name: companyName,
+    title: clean(input.title),
+    email: clean(input.email),
+    phone: clean(input.phone),
+    company_id: companyId,
+    owner_user_id: user?.appUserId ?? null,
+  });
+  if (error) {
+    console.error("createPersonAndInviteAction/invitee", error.message);
+    return { ok: false, message: "파트너는 만들어졌지만 명단 추가에 실패했습니다" };
+  }
+  revalidatePath(`/events/${eventId}`);
+  return { ok: true, message: `${name} 신규 등록 후 추가됨` };
 }

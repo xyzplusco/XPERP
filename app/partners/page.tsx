@@ -104,6 +104,15 @@ export default async function PartnersPage({
 
       <SaveNotice saved={saved ?? trashed} error={error} />
 
+      <div className="filterBar">
+        <Link href="/partners" className="smallButton navItemActive">
+          전체 명부
+        </Link>
+        <Link href="/partners/board" className="smallButton">
+          관리 보드
+        </Link>
+      </div>
+
       <div className="tabRow">
         <Link href="/partners" className={classFilter ? "tab" : "tab tabOn"}>
           전체<span className="tabCount">{withClass.length}</span>

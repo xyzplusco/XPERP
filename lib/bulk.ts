@@ -40,7 +40,7 @@ export const EDITABLE: Record<EntityKey, Record<string, FieldSpec>> = {
     project_type: { options: PROJECT_TYPE, adminOnly: true },
     folder_id: { ref: true, adminOnly: true },
     contract_status: { text: true },
-    expected_revenue: { number: true },
+    expected_revenue: { number: true, adminOnly: true },
     start_date: { date: true },
     end_date: { date: true },
     next_action: { text: true },

@@ -55,10 +55,7 @@ const LABELS: Record<string, string> = {
   Review: "검토",
 
   // roles
-  admin: "관리자",
-  partner: "파트너",
-  member: "구성원",
-  external_contributor: "외부 협력",
+  staff: "임직원",
   pl: "PL",
   pm: "PM",
   owner: "총괄",

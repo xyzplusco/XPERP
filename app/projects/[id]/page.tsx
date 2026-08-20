@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { DocumentsPanel } from "@/components/DocumentsPanel";
 import { SaveNotice } from "@/components/SaveNotice";
 import { addProjectUpdateAction, addTaskAction, updateProjectAction } from "@/lib/actions";
-import { canEditProject, getSessionUser, isAdmin } from "@/lib/auth";
+import { canEditProject, canSeeRevenue, getSessionUser, isAdmin } from "@/lib/auth";
 import { MeetingNotesPanel } from "@/components/MeetingNotesPanel";
 import { getFolders, getPeopleNames, getProject, getProjectMeetingNotes } from "@/lib/queries";
 import {
@@ -116,10 +116,12 @@ export default async function ProjectDetailPage({
                 {formatDate(project.start_date as string | null)} ~ {formatDate(project.end_date as string | null)}
               </div>
             </div>
-            <div className="kvItem">
-              <div className="kvLabel">예상 매출</div>
-              <div className="kvValue">{formatAmount(project.expected_revenue as number | null)}</div>
-            </div>
+            {canSeeRevenue(user) ? (
+              <div className="kvItem">
+                <div className="kvLabel">예상 매출</div>
+                <div className="kvValue">{formatAmount(project.expected_revenue as number | null)}</div>
+              </div>
+            ) : null}
             <div className="kvItem">
               <div className="kvLabel">고객 니즈</div>
               <div className="kvValue">{String(project.client_need ?? "") || "–"}</div>
@@ -374,10 +376,12 @@ export default async function ProjectDetailPage({
                   </select>
                 </div>
               ) : null}
-              <div className="field">
-                <label>예상 매출</label>
-                <input name="expected_revenue" defaultValue={project.expected_revenue == null ? "" : String(project.expected_revenue)} />
-              </div>
+              {canSeeRevenue(user) ? (
+                <div className="field">
+                  <label>예상 매출</label>
+                  <input name="expected_revenue" defaultValue={project.expected_revenue == null ? "" : String(project.expected_revenue)} />
+                </div>
+              ) : null}
               <div className="field">
                 <label>시작일</label>
                 <input name="start_date" type="date" defaultValue={String(project.start_date ?? "")} />

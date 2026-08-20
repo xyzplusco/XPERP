@@ -4,7 +4,7 @@ import { DealTable } from "@/components/DealTable";
 import { DocumentsPanel } from "@/components/DocumentsPanel";
 import { SaveNotice } from "@/components/SaveNotice";
 import { updateCustomerAction } from "@/lib/actions";
-import { getSessionUser, isAdmin } from "@/lib/auth";
+import { canSeeRevenue, getSessionUser, isAdmin } from "@/lib/auth";
 import { MeetingNotesPanel } from "@/components/MeetingNotesPanel";
 import { getCompanyMeetingNotes, getCustomer } from "@/lib/queries";
 import { formatAmount, formatDate, label } from "@/lib/labels";
@@ -44,7 +44,7 @@ export default async function CustomerDetailPage({
         </div>
         <div className="detailSub">
           프로젝트 {projects.length}건
-          {revenueSum > 0 ? ` · 예상 매출 합계 ${formatAmount(revenueSum)}` : ""}
+          {canSeeRevenue(user) && revenueSum > 0 ? ` · 예상 매출 합계 ${formatAmount(revenueSum)}` : ""}
           {company.representative_name ? ` · 대표 ${company.representative_name}` : ""}
         </div>
       </div>

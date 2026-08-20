@@ -7,6 +7,8 @@ import {
   deleteInviteeAction,
   updateInviteeAction,
 } from "@/lib/actions";
+import { InviteeLookup } from "@/components/InviteeLookup";
+import type { DirectoryPerson } from "@/lib/queries";
 
 export type Invitee = {
   id: string;
@@ -33,9 +35,11 @@ const FLAGS: { key: keyof Invitee; label: string }[] = [
 export function InviteeManager({
   eventId,
   invitees,
+  people,
 }: {
   eventId: string;
   invitees: Invitee[];
+  people: DirectoryPerson[];
 }) {
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -126,6 +130,11 @@ export function InviteeManager({
         </div>
 
         <div className="panelBody" style={{ borderBottom: "1px solid var(--line)" }}>
+          <InviteeLookup
+            eventId={eventId}
+            people={people}
+            invitedPersonIds={invitees.map((i) => i.person_id).filter((v): v is string => Boolean(v))}
+          />
           <div className="copyRow">
             <button
               className="secondaryButton"

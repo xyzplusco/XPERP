@@ -2,7 +2,7 @@ import Link from "next/link";
 import { deleteMeetingNoteAction, uploadMeetingNoteAction } from "@/lib/actions";
 import { formatDate, formatDateTime } from "@/lib/labels";
 import type { MeetingNote } from "@/lib/queries";
-import type { SessionUser } from "@/lib/auth";
+import { isAdmin, type SessionUser } from "@/lib/auth";
 
 export function MeetingNotesPanel({
   companyId,
@@ -21,7 +21,7 @@ export function MeetingNotesPanel({
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const canRemove = (note: MeetingNote) =>
-    user?.role === "admin" || (user?.appUserId != null && note.uploaded_by_user_id === user.appUserId);
+    isAdmin(user) || (user?.appUserId != null && note.uploaded_by_user_id === user.appUserId);
 
   return (
     <div className="panel">

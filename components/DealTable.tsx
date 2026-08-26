@@ -18,9 +18,9 @@ export function DealTable({
           <tr>
             <th>고객사</th>
             <th>프로젝트</th>
-            <th>유형</th>
+            <th>구간</th>
             <th>상태</th>
-            <th>계약</th>
+            <th>서비스섹터</th>
             {roleColumn ? <th>역할</th> : null}
             <th>PL</th>
             <th>PM</th>
@@ -52,9 +52,9 @@ export function DealTable({
                     {row.name}
                   </Link>
                 </td>
-                <td>{label(row.project_type)}</td>
-                <td>{label(row.status)}</td>
-                <td>{label(row.contract_status) || <span className="faintText">–</span>}</td>
+                <td>{row.pipeline_stage}</td>
+                <td>{row.deal_status}</td>
+                <td>{row.service_sector}</td>
                 {roleColumn ? <td>{row.roles ?? ""}</td> : null}
                 <td>
                   {row.pl ? (

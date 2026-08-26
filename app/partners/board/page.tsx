@@ -2,7 +2,7 @@ import Link from "next/link";
 import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable";
 import { SaveNotice } from "@/components/SaveNotice";
 import { getPartnerBoard, type PartnerBoardRow } from "@/lib/queries";
-import { getSessionUser, isOwner } from "@/lib/auth";
+import { getSessionUser, isAdmin } from "@/lib/auth";
 import { PARTNER_CLASS_OPTIONS, partnerClass } from "@/lib/labels";
 import { daysSince } from "@/lib/week";
 
@@ -201,7 +201,7 @@ export default async function PartnerBoardPage({
       <div className="panel">
         <BulkTable
           storageKey="partner-board"
-          canPaste={isOwner(user)}
+          canPaste={isAdmin(user)}
           entity="people"
           columns={columns}
           rows={rows}

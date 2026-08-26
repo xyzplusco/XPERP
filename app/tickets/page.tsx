@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable";
 import { SaveNotice } from "@/components/SaveNotice";
-import { getSessionUser, isOwner } from "@/lib/auth";
+import { getSessionUser, isAdmin } from "@/lib/auth";
 import { getAssignablePeople, getProjectOptions, getTicketCounts, getTickets } from "@/lib/queries";
 import { formatDate, label } from "@/lib/labels";
 import { shortId } from "@/lib/ids";
@@ -105,7 +105,7 @@ export default async function TicketsPage({
         <BulkTable
           entity="tasks"
           storageKey="tickets"
-          canPaste={isOwner(user)}
+          canPaste={isAdmin(user)}
           columns={columns}
           rows={rows}
           returnPath={returnPath}

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { SaveNotice } from "@/components/SaveNotice";
-import { saveWeeklyUpdatesAction } from "@/lib/actions";
+import { deleteWeeklyUpdateAction, saveWeeklyUpdatesAction } from "@/lib/actions";
 import { isAdmin, requireUser } from "@/lib/auth";
 import { getWeeklyBoard } from "@/lib/queries";
 import { currentWeek, previousWeek, recentWeeks, type Week } from "@/lib/week";
+import { formatDateTime } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -93,8 +94,24 @@ export default async function WeeklyPage({
                       {row.name}
                     </Link>
                     <div className="faintText" style={{ fontSize: 12 }}>
-                      {[row.company, row.contract_status].filter(Boolean).join(" · ")}
+                      {[row.company, row.deal_status].filter(Boolean).join(" · ")}
                     </div>
+
+                    {row.updateId ? (
+                      <div className="weeklyStamp">
+                        {[
+                          row.author ? `${row.author} 작성` : null,
+                          row.editedAt ? formatDateTime(row.editedAt) : null,
+                          row.editCount > 0 ? `${row.editCount}회 수정` : null,
+                          row.confirmedAt ? "확인됨" : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </div>
+                    ) : null}
+
+                    {row.reviewNote ? <div className="reviewNote">{row.reviewNote}</div> : null}
+
                     {row.previous ? (
                       <div className="weeklyPrev">
                         <div className="faintText" style={{ fontSize: 11.5 }}>
@@ -104,12 +121,25 @@ export default async function WeeklyPage({
                       </div>
                     ) : null}
                   </div>
-                  <textarea
-                    name={`body_${row.projectId}`}
-                    defaultValue={row.current}
-                    rows={4}
-                    placeholder="이번 주 진행 내용"
-                  />
+
+                  <div className="weeklyInput">
+                    <textarea
+                      name={`body_${row.projectId}`}
+                      defaultValue={row.current}
+                      rows={4}
+                      placeholder=""
+                    />
+                    {row.updateId ? (
+                      <button
+                        className="smallButton"
+                        type="submit"
+                        formAction={deleteWeeklyUpdateAction.bind(null, row.updateId, week.label)}
+                        formNoValidate
+                      >
+                        이 주차 기록 삭제
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>

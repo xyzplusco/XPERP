@@ -2,8 +2,13 @@ import Link from "next/link";
 import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable";
 import { SaveNotice } from "@/components/SaveNotice";
 import { getDeals, getFolderCounts, getFolders, getLastUpdateMap, getPersonOptions } from "@/lib/queries";
-import { getSessionUser, isOwner } from "@/lib/auth";
-import { label, PROJECT_STATUS_OPTIONS, PROJECT_TYPE_OPTIONS, formatDate } from "@/lib/labels";
+import { getSessionUser, isAdmin } from "@/lib/auth";
+import {
+  ARCHIVED_DEAL_STATUS,
+  DEAL_STATUS_OPTIONS,
+  PIPELINE_STAGE_OPTIONS,
+  SERVICE_SECTOR_OPTIONS,
+} from "@/lib/labels";
 import { daysSince } from "@/lib/week";
 
 export const dynamic = "force-dynamic";
@@ -29,9 +34,8 @@ export default async function ProjectsPage({
   });
   const lastMap = await getLastUpdateMap(allDeals.map((d) => d.id));
 
-  // 아카이브 = 끝났거나 진행하지 않는 건 (완료·중단·보류·관리기업)
-  const isArchived = (deal: (typeof allDeals)[number]) =>
-    ["done", "dropped", "on_hold"].includes(deal.status) || deal.contract_status === "관리기업";
+  // 아카이브 = 더 진행하지 않는 건 (상태가 관리·보류)
+  const isArchived = (deal: (typeof allDeals)[number]) => ARCHIVED_DEAL_STATUS.has(deal.deal_status);
 
   const deals =
     view === "archive" ? allDeals.filter(isArchived)
@@ -50,15 +54,17 @@ export default async function ProjectsPage({
   }).length;
 
   const folderOptions: [string, string][] = folders.map((item) => [item.id, item.name]);
-  const statusOptions: [string, string][] = PROJECT_STATUS_OPTIONS.map((v) => [v, label(v)]);
-  const typeOptions: [string, string][] = PROJECT_TYPE_OPTIONS.map((v) => [v, label(v)]);
+  const stageOptions: [string, string][] = PIPELINE_STAGE_OPTIONS.map((v) => [v, v]);
+  const statusOptions: [string, string][] = DEAL_STATUS_OPTIONS.map((v) => [v, v]);
+  const sectorOptions: [string, string][] = SERVICE_SECTOR_OPTIONS.map((v) => [v, v]);
 
   const columns: ColumnDef[] = [
     { key: "company", header: "고객사", width: 120, kind: "readonly" },
     { key: "name", header: "프로젝트명", width: 200, kind: "text" },
-    { key: "folder_id", header: "폴더", width: 150, kind: "select", options: folderOptions },
-    { key: "project_type", header: "유형", width: 110, kind: "select", options: typeOptions },
-    { key: "status", header: "상태", width: 90, kind: "select", options: statusOptions },
+    { key: "pipeline_stage", header: "구간", width: 110, kind: "select", options: stageOptions },
+    { key: "deal_status", header: "상태", width: 90, kind: "select", options: statusOptions },
+    { key: "service_sector", header: "서비스섹터", width: 140, kind: "select", options: sectorOptions },
+    { key: "folder_id", header: "폴더", width: 130, kind: "select", options: folderOptions },
     { key: "primary_pl_person_id", header: "PL", width: 100, kind: "select", options: peopleOptions },
     { key: "candidate_pm_person_id", header: "PM", width: 100, kind: "select", options: peopleOptions },
     { key: "last_update", header: "마지막 업데이트", width: 130, kind: "readonly" },
@@ -72,9 +78,10 @@ export default async function ProjectsPage({
     display: {
       company: deal.company?.name_ko ?? "",
       name: deal.name,
+      pipeline_stage: deal.pipeline_stage,
+      deal_status: deal.deal_status,
+      service_sector: deal.service_sector,
       folder_id: folders.find((f) => f.id === deal.folder_id)?.name ?? "Unsorted",
-      project_type: label(deal.project_type),
-      status: label(deal.status),
       primary_pl_person_id: deal.pl?.name_ko ?? "",
       candidate_pm_person_id: deal.pm?.name_ko ?? "",
       last_update: (() => {
@@ -90,8 +97,9 @@ export default async function ProjectsPage({
       primary_pl_person_id: deal.pl?.id ?? "",
       candidate_pm_person_id: deal.pm?.id ?? "",
       folder_id: deal.folder_id ?? "",
-      project_type: deal.project_type,
-      status: deal.status,
+      pipeline_stage: deal.pipeline_stage,
+      deal_status: deal.deal_status,
+      service_sector: deal.service_sector,
       end_date: deal.end_date ?? "",
       next_action: deal.next_action ?? "",
     },
@@ -146,8 +154,8 @@ export default async function ProjectsPage({
         <input type="hidden" name="view" value={view} />
         <select name="status" defaultValue={status ?? ""}>
           <option value="">전체 상태</option>
-          {PROJECT_STATUS_OPTIONS.map((option) => (
-            <option key={option} value={option}>{label(option)}</option>
+          {DEAL_STATUS_OPTIONS.map((option) => (
+            <option key={option} value={option}>{option}</option>
           ))}
         </select>
         <button className="smallButton" type="submit">적용</button>
@@ -160,11 +168,12 @@ export default async function ProjectsPage({
           rows={rows}
           returnPath={returnPath}
           storageKey="projects"
-          canPaste={isOwner(user)}
+          canPaste={isAdmin(user)}
           bulkActions={[
+            { field: "deal_status", label: "상태 변경", options: statusOptions },
+            { field: "pipeline_stage", label: "구간 변경", options: stageOptions },
+            { field: "service_sector", label: "서비스섹터 변경", options: sectorOptions },
             { field: "folder_id", label: "폴더 이동", options: folderOptions },
-            { field: "status", label: "상태 변경", options: statusOptions },
-            { field: "project_type", label: "유형 변경", options: typeOptions },
             { field: "primary_pl_person_id", label: "PL 지정", options: peopleOptions },
             { field: "candidate_pm_person_id", label: "PM 지정", options: peopleOptions },
           ]}

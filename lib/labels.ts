@@ -103,6 +103,22 @@ export const DOC_REQUIREMENT_STATUS_OPTIONS = [
 
 export const TASK_STATUS_OPTIONS = ["backlog", "in_progress", "waiting", "blocked", "done", "dropped"] as const;
 
+// 프로젝트 3축 — 통합 파이프라인 엑셀의 구간·상태·서비스섹터를 그대로 쓴다.
+export const PIPELINE_STAGE_OPTIONS = ["고객", "협상", "관리기업", "파트너협업건", "미정리후보"] as const;
+export const DEAL_STATUS_OPTIONS = ["계약", "계약임박", "제안", "가망", "관리", "보류", "미분류"] as const;
+export const SERVICE_SECTOR_OPTIONS = [
+  "Re-Engineering",
+  "Business Building",
+  "투자·매각",
+  "영업",
+  "Go Global",
+  "AX",
+  "기타·미정",
+] as const;
+
+// 아카이브 = 더 진행하지 않는 것
+export const ARCHIVED_DEAL_STATUS = new Set<string>(["관리", "보류"]);
+
 // 파트너 구분 (partner_status에 저장)
 export const PARTNER_CLASS_OPTIONS = ["임원", "직원", "파트너", "파트너 후보", "협력사", "고객사 담당자", "외부 전문가", "기타"] as const;
 

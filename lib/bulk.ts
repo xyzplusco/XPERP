@@ -25,6 +25,11 @@ const PROJECT_TYPE = [
 ] as const;
 const EVENT_STATUS = ["planning", "inviting", "confirmed", "completed", "cancelled"] as const;
 const TASK_STATUS = ["backlog", "in_progress", "waiting", "blocked", "done", "dropped"] as const;
+const PIPELINE_STAGE = ["고객", "협상", "관리기업", "파트너협업건", "미정리후보"] as const;
+const DEAL_STATUS = ["계약", "계약임박", "제안", "가망", "관리", "보류", "미분류"] as const;
+const SERVICE_SECTOR = [
+  "Re-Engineering", "Business Building", "투자·매각", "영업", "Go Global", "AX", "기타·미정",
+] as const;
 const PARTNER_CLASS = [
   "임원", "직원", "파트너", "파트너 후보", "협력사", "고객사 담당자", "외부 전문가", "기타",
 ] as const;
@@ -36,6 +41,10 @@ const NETWORK_SEGMENT = [
 export const EDITABLE: Record<EntityKey, Record<string, FieldSpec>> = {
   projects: {
     name: { text: true },
+    pipeline_stage: { options: PIPELINE_STAGE },
+    deal_status: { options: DEAL_STATUS },
+    service_sector: { options: SERVICE_SECTOR },
+    // status / project_type 은 deal_status·service_sector 에서 파생된다. 직접 쓰지 말 것.
     status: { options: PROJECT_STATUS },
     project_type: { options: PROJECT_TYPE, adminOnly: true },
     folder_id: { ref: true, adminOnly: true },

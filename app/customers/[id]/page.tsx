@@ -3,10 +3,10 @@ import { notFound } from "next/navigation";
 import { DealTable } from "@/components/DealTable";
 import { DocumentsPanel } from "@/components/DocumentsPanel";
 import { SaveNotice } from "@/components/SaveNotice";
-import { updateCustomerAction } from "@/lib/actions";
+import { deleteCompanyAction, mergeCompanyAction, updateCustomerAction } from "@/lib/actions";
 import { canSeeRevenue, getSessionUser, isAdmin } from "@/lib/auth";
 import { MeetingNotesPanel } from "@/components/MeetingNotesPanel";
-import { getCompanyMeetingNotes, getCustomer } from "@/lib/queries";
+import { getCompanyMeetingNotes, getCustomer, getCompanyNames } from "@/lib/queries";
 import { formatAmount, formatDate, label } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -16,14 +16,15 @@ export default async function CustomerDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; reason?: string }>;
 }) {
   const { id } = await params;
-  const { saved, error } = await searchParams;
-  const [user, data, meetingNotes] = await Promise.all([
+  const { saved, error, reason } = await searchParams;
+  const [user, data, meetingNotes, companyNames] = await Promise.all([
     getSessionUser(),
     getCustomer(id),
     getCompanyMeetingNotes(id),
+    getCompanyNames(),
   ]);
   if (!data) notFound();
 
@@ -49,7 +50,7 @@ export default async function CustomerDetailPage({
         </div>
       </div>
 
-      <SaveNotice saved={saved} error={error} />
+      <SaveNotice saved={saved} error={error} reason={reason} />
 
       <div className="panel">
         <div className="panelHeader">
@@ -293,6 +294,36 @@ export default async function CustomerDetailPage({
                   저장
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {admin ? (
+        <div className="panel">
+          <div className="panelHeader">
+            <div className="panelTitle">정리</div>
+          </div>
+          <div className="panelBody">
+            <form action={mergeCompanyAction.bind(null, id)} className="inlineForm">
+              <div className="field">
+                <label>여기로 합칠 고객사</label>
+                <input name="source_name" list="company-names" placeholder="주식회사 플링캐스트" required />
+              </div>
+              <button className="smallButton" type="submit">
+                병합
+              </button>
+            </form>
+            <datalist id="company-names">
+              {companyNames.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+
+            <form action={deleteCompanyAction.bind(null, id)} style={{ marginTop: 12 }}>
+              <button className="dangerButton" type="submit">
+                휴지통으로
+              </button>
             </form>
           </div>
         </div>

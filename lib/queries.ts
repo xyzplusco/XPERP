@@ -1,4 +1,5 @@
 import { createSupabaseServer } from "@/lib/supabase/server";
+import { shortId } from "@/lib/ids";
 
 type Ref = { id: string; name_ko: string } | null;
 
@@ -21,6 +22,9 @@ export type DealRow = {
   project_type: string;
   status: string;
   contract_status: string | null;
+  pipeline_stage: string;
+  deal_status: string;
+  service_sector: string;
   expected_revenue: number | null;
   latest_update: string | null;
   next_action: string | null;
@@ -33,7 +37,8 @@ export type DealRow = {
 };
 
 const DEAL_SELECT =
-  "id, name, project_type, status, contract_status, expected_revenue, latest_update, next_action, end_date, updated_at, folder_id, " +
+  "id, name, project_type, status, contract_status, pipeline_stage, deal_status, service_sector, " +
+  "expected_revenue, latest_update, next_action, end_date, updated_at, folder_id, " +
   "company:companies!projects_company_id_fkey(id, name_ko), " +
   "pl:people!projects_primary_pl_person_id_fkey(id, name_ko), " +
   "pm:people!projects_candidate_pm_person_id_fkey(id, name_ko)";
@@ -58,7 +63,7 @@ export async function getDeals(filters?: { status?: string; type?: string; folde
     .select(DEAL_SELECT)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
-  if (filters?.status) query = query.eq("status", filters.status);
+  if (filters?.status) query = query.eq("deal_status", filters.status);
   if (filters?.type) query = query.eq("project_type", filters.type);
   if (filters?.folderId) query = query.eq("folder_id", filters.folderId);
   if (filters?.unsorted) query = query.is("folder_id", null);
@@ -84,7 +89,7 @@ export async function getDashboardStats() {
   };
 
   const [customers, activeProjects, confirmed, openDocs, openTasks, people] = await Promise.all([
-    supabase.from("erp_customer_rows").select("id", { count: "exact", head: true }).then((r) => r.count ?? 0),
+    supabase.from("companies").select("id", { count: "exact", head: true }).is("deleted_at", null).then((r) => r.count ?? 0),
     count("projects", (q: any) => q.in("status", ["confirmed", "likely", "discussing", "managed"])),
     count("projects", (q: any) => q.eq("status", "confirmed")),
     count("document_requirements", (q: any) => q.in("status", ["needed", "requested", "expired"])),
@@ -100,23 +105,80 @@ export type CustomerRow = {
   customer_id: string;
   customer: string;
   industry: string;
+  representative: string;
   project_count: number;
   active_project_count: number;
-  contract_count: number;
-  document_gap_count: number;
-  task_count: number;
+  partner_count: number;
   latest_status: string;
   next_action: string;
+  // 고객사 = 프로젝트 있음 / 소속처 = 파트너만 붙어 있음 / 미연결 = 아무것도 없음
+  kind: "고객사" | "소속처" | "미연결";
 };
 
-export async function getCustomers() {
+// 숨김 뷰(erp_customer_rows)를 걷어내고 실제 테이블에서 직접 만든다.
+// 화면에서 안 보이면 편집도 삭제도 못 하기 때문에, 감추지 않고 분류만 한다.
+export async function getCustomers(): Promise<CustomerRow[]> {
   const supabase = await createSupabaseServer();
-  const { data, error } = await supabase.from("erp_customer_rows").select("*").limit(1000);
-  if (error) {
-    console.error("getCustomers", error.message);
-    return [];
+
+  const [companyRes, projectRes, peopleRes] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("id, name_ko, industry, sub_industry, representative_name, next_action")
+      .is("deleted_at", null)
+      .order("name_ko")
+      .limit(2000),
+    supabase
+      .from("projects")
+      .select("company_id, deal_status, next_action, latest_update, updated_at")
+      .is("deleted_at", null)
+      .limit(2000),
+    supabase.from("people").select("primary_company_id").is("deleted_at", null).limit(2000),
+  ]);
+
+  warnIfCapped("고객사", companyRes.data, 2000);
+
+  const byCompany = new Map<string, { total: number; active: number; latest: string; next: string; at: string }>();
+  for (const row of (projectRes.data ?? []) as {
+    company_id: string | null; deal_status: string; next_action: string | null;
+    latest_update: string | null; updated_at: string;
+  }[]) {
+    if (!row.company_id) continue;
+    const cur = byCompany.get(row.company_id) ?? { total: 0, active: 0, latest: "", next: "", at: "" };
+    cur.total += 1;
+    if (!["관리", "보류"].includes(row.deal_status)) cur.active += 1;
+    if (row.updated_at > cur.at) {
+      cur.at = row.updated_at;
+      cur.latest = row.deal_status;
+      cur.next = row.next_action ?? row.latest_update ?? "";
+    }
+    byCompany.set(row.company_id, cur);
   }
-  return (data ?? []) as CustomerRow[];
+
+  const partnerCount = new Map<string, number>();
+  for (const row of (peopleRes.data ?? []) as { primary_company_id: string | null }[]) {
+    if (!row.primary_company_id) continue;
+    partnerCount.set(row.primary_company_id, (partnerCount.get(row.primary_company_id) ?? 0) + 1);
+  }
+
+  return ((companyRes.data ?? []) as Record<string, string | null>[]).map((row) => {
+    const id = row.id as string;
+    const stat = byCompany.get(id);
+    const partners = partnerCount.get(id) ?? 0;
+    const kind: CustomerRow["kind"] = stat ? "고객사" : partners > 0 ? "소속처" : "미연결";
+    return {
+      id,
+      customer_id: shortId("C", id),
+      customer: row.name_ko ?? "",
+      industry: row.industry ?? row.sub_industry ?? "",
+      representative: row.representative_name ?? "",
+      project_count: stat?.total ?? 0,
+      active_project_count: stat?.active ?? 0,
+      partner_count: partners,
+      latest_status: stat?.latest ?? "",
+      next_action: stat?.next || (row.next_action ?? ""),
+      kind,
+    };
+  });
 }
 
 export async function getCustomer(id: string) {
@@ -319,9 +381,12 @@ export async function getProject(id: string) {
       .eq("project_id", id),
     supabase
       .from("project_weekly_updates")
-      .select("id, update_label, update_date, body, created_at")
+      .select(
+        "id, update_label, update_date, body, created_at, last_edited_at, edit_count, confirmed_at, review_note, " +
+          "author:users!project_weekly_updates_updated_by_user_id_fkey(email, person:people!users_person_id_fkey(name_ko))"
+      )
       .eq("project_id", id)
-      .order("created_at", { ascending: false })
+      .order("update_date", { ascending: false, nullsFirst: false })
       .limit(50),
     supabase
       .from("tasks")
@@ -352,7 +417,10 @@ export async function getProject(id: string) {
       project_role: row.project_role as string,
       person: one(row.person as { id: string; name_ko: string; title: string | null } | { id: string; name_ko: string; title: string | null }[]),
     })),
-    updates: (updatesRes.data ?? []) as Record<string, string | null>[],
+    updates: (updatesRes.data ?? []) as unknown as (Record<string, string | null> & {
+      author?: { email: string; person?: { name_ko: string } | { name_ko: string }[] } | { email: string; person?: { name_ko: string } | { name_ko: string }[] }[] | null;
+      edit_count?: number | null;
+    })[],
     tasks: (tasksRes.data ?? []) as Record<string, string | null>[],
     documentRequirements: (docReqRes.data ?? []) as Record<string, string | null>[],
     documents,
@@ -703,7 +771,7 @@ export async function getTickets(filters?: {
 
   if (filters?.scope === "unsorted") query = query.is("project_id", null);
   if (filters?.scope === "open") query = query.in("status", ["backlog", "in_progress", "waiting", "blocked"]);
-  if (filters?.status) query = query.eq("status", filters.status);
+  if (filters?.status) query = query.eq("deal_status", filters.status);
   if (filters?.assigneePersonId) query = query.eq("assignee_person_id", filters.assigneePersonId);
 
   const { data, error } = await query.limit(500);
@@ -876,7 +944,8 @@ export type MyProject = {
   id: string;
   name: string;
   status: string;
-  contract_status: string | null;
+  deal_status: string;
+  pipeline_stage: string;
   company: string | null;
   lastUpdateDate: string | null;
   lastUpdateLabel: string | null;
@@ -917,7 +986,7 @@ export async function getMyWork(personId: string | null) {
     ids.length > 0
       ? supabase
           .from("projects")
-          .select("id, name, status, contract_status, company:companies!projects_company_id_fkey(name_ko)")
+          .select("id, name, deal_status, pipeline_stage, company:companies!projects_company_id_fkey(name_ko)")
           .in("id", ids)
           .is("deleted_at", null)
       : Promise.resolve({ data: [] }),
@@ -933,7 +1002,8 @@ export async function getMyWork(personId: string | null) {
         id: row.id as string,
         name: row.name as string,
         status: row.status as string,
-        contract_status: (row.contract_status as string) ?? null,
+        deal_status: (row.deal_status as string) ?? "미분류",
+        pipeline_stage: (row.pipeline_stage as string) ?? "미정리후보",
         company: company?.name_ko ?? null,
         lastUpdateDate: last?.date ?? null,
         lastUpdateLabel: last?.label ?? null,
@@ -950,9 +1020,17 @@ export type WeeklyRow = {
   projectId: string;
   name: string;
   company: string | null;
-  contract_status: string | null;
+  deal_status: string;
+  pipeline_stage: string;
   current: string;
   previous: string;
+  // 이 주차 기록의 상태 — 누가 언제 썼고, 어드민이 확인했는지, 보완 요청이 걸렸는지
+  updateId: string | null;
+  author: string | null;
+  editedAt: string | null;
+  editCount: number;
+  confirmedAt: string | null;
+  reviewNote: string | null;
 };
 
 // 주차 작성 화면용 — 내 프로젝트 + 해당 주차 기존 내용 + 지난 주차 내용
@@ -964,34 +1042,58 @@ export async function getWeeklyBoard(personId: string | null, label: string, pre
   const [projectsRes, updatesRes] = await Promise.all([
     supabase
       .from("projects")
-      .select("id, name, contract_status, company:companies!projects_company_id_fkey(name_ko)")
+      .select("id, name, deal_status, pipeline_stage, company:companies!projects_company_id_fkey(name_ko)")
       .in("id", ids)
       .is("deleted_at", null),
     supabase
       .from("project_weekly_updates")
-      .select("project_id, update_label, body")
+      .select(
+        "id, project_id, update_label, body, confirmed_at, review_note, last_edited_at, edit_count, " +
+          "author:users!project_weekly_updates_updated_by_user_id_fkey(email, person:people!users_person_id_fkey(name_ko))"
+      )
       .in("project_id", ids)
       .in("update_label", [label, previousLabel]),
   ]);
 
-  const current = new Map<string, string>();
+  type UpdateRow = {
+    id: string; project_id: string; update_label: string; body: string;
+    confirmed_at: string | null; review_note: string | null;
+    last_edited_at: string | null; edit_count: number | null; author: unknown;
+  };
+
+  const authorName = (raw: unknown) => {
+    const user = one(raw as { email: string; person: unknown } | { email: string; person: unknown }[]);
+    if (!user) return null;
+    const person = one(user.person as { name_ko: string } | { name_ko: string }[]);
+    return person?.name_ko ?? user.email ?? null;
+  };
+
+  const current = new Map<string, UpdateRow>();
   const previous = new Map<string, string>();
-  for (const row of (updatesRes.data ?? []) as { project_id: string; update_label: string; body: string }[]) {
-    if (row.update_label === label) current.set(row.project_id, row.body);
+  for (const row of (updatesRes.data ?? []) as unknown as UpdateRow[]) {
+    if (row.update_label === label) current.set(row.project_id, row);
     else if (row.update_label === previousLabel) previous.set(row.project_id, row.body);
   }
 
   return ((projectsRes.data ?? []) as unknown as Record<string, unknown>[])
     .map((row) => {
       const company = one(row.company as { name_ko: string } | { name_ko: string }[]);
+      const hit = current.get(row.id as string);
       return {
         projectId: row.id as string,
         name: row.name as string,
         company: company?.name_ko ?? null,
-        contract_status: (row.contract_status as string) ?? null,
-        current: current.get(row.id as string) ?? "",
+        deal_status: (row.deal_status as string) ?? "미분류",
+        pipeline_stage: (row.pipeline_stage as string) ?? "미정리후보",
+        current: hit?.body ?? "",
         previous: previous.get(row.id as string) ?? "",
-      };
+        updateId: hit?.id ?? null,
+        author: hit ? authorName(hit.author) : null,
+        editedAt: hit?.last_edited_at ?? null,
+        editCount: hit?.edit_count ?? 0,
+        confirmedAt: hit?.confirmed_at ?? null,
+        reviewNote: hit?.review_note ?? null,
+      } satisfies WeeklyRow;
     })
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
@@ -1293,4 +1395,15 @@ export async function getTicket(id: string) {
       storage_path: string | null;
     }[],
   };
+}
+
+export async function getCompanyNames(): Promise<string[]> {
+  const supabase = await createSupabaseServer();
+  const { data } = await supabase
+    .from("companies")
+    .select("name_ko")
+    .is("deleted_at", null)
+    .order("name_ko")
+    .limit(2000);
+  return Array.from(new Set(((data ?? []) as { name_ko: string }[]).map((c) => c.name_ko))).filter(Boolean);
 }

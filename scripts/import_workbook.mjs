@@ -141,9 +141,15 @@ const plan = {
   projects: { update: [], insert: [], delete: [] },
 };
 const errors = [];
+const notices = [];
 
 function error(sheet, row, message) {
   errors.push({ sheet, row, message });
+}
+
+// 임포트를 막지는 않지만 알려야 하는 것
+function notice(sheet, row, message) {
+  notices.push({ sheet, row, message });
 }
 
 function normalizeForCompare(value) {
@@ -409,9 +415,15 @@ try {
     const companyName = asText(row.company_name);
     let companyId = null;
     if (companyName) {
-      const resolved = resolveName(companyByName, pendingCompanyNames, companyName, S2, row.__row, "소속 회사", { required: false });
-      if (resolved === INVALID) continue;
-      companyId = resolved; // "PENDING" 가능
+      // 파트너 '소속 회사' 칸의 텍스트로 새 회사를 만들지 않는다.
+      // 예전에는 여기서 자동 생성해서, 소속 칸에 이메일이 적혀 있으면 그 이메일이 고객사가 됐다.
+      // (고객사 459건 중 396건이 이렇게 생긴 껍데기였다)
+      const known = companyByName.get(companyName);
+      if (known && known !== "AMBIGUOUS") {
+        companyId = known;
+      } else {
+        notice(S2, row.__row, `소속 회사 "${companyName}" 이(가) 고객사 명단에 없습니다. 소속을 비워 둡니다. 필요하면 고객사 시트에 먼저 등록하세요.`);
+      }
     }
 
     const personPayload = {
@@ -629,6 +641,16 @@ try {
   showDetail("customers", "고객사");
   showDetail("partners", "파트너");
   showDetail("projects", "프로젝트");
+
+  if (notices.length > 0) {
+    console.log("");
+    console.log(`안내 ${notices.length}건 — 반영은 되지만 확인이 필요합니다:`);
+    for (const item of notices.slice(0, 30)) {
+      console.log(`    ${item.sheet} ${item.row}행: ${item.message}`);
+    }
+    if (notices.length > 30) console.log(`    … 외 ${notices.length - 30}건`);
+    console.log("");
+  }
 
   if (errors.length > 0) {
     console.log("!".repeat(60));

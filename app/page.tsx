@@ -153,7 +153,7 @@ export default async function HomePage() {
                             {project.name}
                           </Link>
                         </td>
-                        <td>{project.contract_status ?? label(project.status)}</td>
+                        <td>{project.deal_status}</td>
                         <td className={days === null || days > 30 ? "staleDays staleWarn" : "staleDays mutedText"}>
                           {project.lastUpdateLabel
                             ? `${project.lastUpdateLabel}${days !== null ? ` (${days}일)` : ""}`

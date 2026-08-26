@@ -65,13 +65,15 @@ export async function updateProjectAction(projectId: string, formData: FormData)
 
   const { data: previous } = await supabase
     .from("projects")
-    .select("name, status, contract_status, expected_revenue")
+    .select("name, deal_status, pipeline_stage, expected_revenue")
     .eq("id", projectId)
     .maybeSingle();
 
   const payload: Record<string, string | number | null> = {
-    status: text(formData, "status") ?? "discussing",
-    contract_status: text(formData, "contract_status"),
+    // status / contract_status 는 트리거가 deal_status·pipeline_stage 에서 파생시킨다.
+    pipeline_stage: text(formData, "pipeline_stage") ?? "미정리후보",
+    deal_status: text(formData, "deal_status") ?? "미분류",
+    service_sector: text(formData, "service_sector") ?? "기타·미정",
     summary: text(formData, "summary"),
     next_action: text(formData, "next_action"),
     start_date: text(formData, "start_date"),
@@ -86,8 +88,6 @@ export async function updateProjectAction(projectId: string, formData: FormData)
   }
 
   if (isAdmin(user)) {
-    const type = text(formData, "project_type");
-    if (type) payload.project_type = type;
     if (formData.has("folder_id")) payload.folder_id = text(formData, "folder_id");
 
     const plName = text(formData, "pl_name");
@@ -117,13 +117,13 @@ export async function updateProjectAction(projectId: string, formData: FormData)
 
   // 되돌리기 어려운 변경(계약 확정·중단·완료·매출)은 어드민에게 알린다.
   const watched: string[] = [];
-  if (previous && payload.status !== previous.status) {
-    if (["confirmed", "done", "dropped"].includes(String(payload.status))) {
-      watched.push(`상태 ${label(previous.status)} → ${label(String(payload.status))}`);
+  if (previous && payload.deal_status !== previous.deal_status) {
+    if (["계약", "계약임박", "보류"].includes(String(payload.deal_status))) {
+      watched.push(`상태 ${previous.deal_status} → ${payload.deal_status}`);
     }
   }
-  if (previous && payload.contract_status !== previous.contract_status) {
-    watched.push(`구간 ${previous.contract_status ?? "–"} → ${payload.contract_status ?? "–"}`);
+  if (previous && payload.pipeline_stage !== previous.pipeline_stage) {
+    watched.push(`구간 ${previous.pipeline_stage ?? "–"} → ${payload.pipeline_stage ?? "–"}`);
   }
   if (
     previous &&
@@ -1276,7 +1276,7 @@ export async function gridUpdateAction(
   if (cells.length > 2000) return reject("한 번에 2000칸까지 붙여넣을 수 있습니다.");
 
   const user = await getSessionUser();
-  if (!isOwner(user)) return reject("마스터 어드민만 붙여넣기로 수정할 수 있습니다.");
+  if (!isAdmin(user)) return reject("전사 편집 권한이 있는 계정만 붙여넣기로 수정할 수 있습니다.");
 
   const supabase = await createSupabaseServer();
 
@@ -1557,4 +1557,103 @@ async function logActivity(input: {
     // 로그 실패가 본 작업을 막으면 안 된다.
     console.error("logActivity", error);
   }
+}
+
+// ── 고객사 병합 ─────────────────────────────────────────────────────────────
+// 같은 회사가 다른 이름으로 들어온 경우(플링캐스트 / 주식회사 플링캐스트)를 하나로 합친다.
+export async function mergeCompanyAction(targetId: string, formData: FormData) {
+  const returnPath = `/customers/${targetId}`;
+  const user = await getSessionUser();
+  if (!isAdmin(user)) redirect(withQuery(returnPath, "error=forbidden"));
+
+  const sourceName = text(formData, "source_name");
+  if (!sourceName) redirect(withQuery(returnPath, "error=empty"));
+
+  const supabase = await createSupabaseServer();
+  const { data: matches } = await supabase
+    .from("companies")
+    .select("id, name_ko")
+    .eq("name_ko", sourceName)
+    .is("deleted_at", null)
+    .limit(2);
+
+  if (!matches || matches.length === 0) redirect(withQuery(returnPath, "error=company"));
+  if (matches.length > 1) redirect(withQuery(returnPath, "error=duplicate"));
+
+  const sourceId = matches[0].id;
+  if (sourceId === targetId) redirect(withQuery(returnPath, "error=self"));
+
+  // 참조를 전부 대상 회사로 옮긴 뒤 원본을 휴지통으로 보낸다.
+  const moves: [string, string][] = [
+    ["projects", "company_id"],
+    ["people", "primary_company_id"],
+    ["tasks", "company_id"],
+    ["document_requirements", "company_id"],
+    ["meeting_notes", "company_id"],
+    ["person_company_links", "company_id"],
+  ];
+  for (const [table, column] of moves) {
+    const { error } = await supabase.from(table).update({ [column]: targetId }).eq(column, sourceId);
+    if (error) {
+      console.error("mergeCompanyAction", table, error.message);
+      redirect(withQuery(returnPath, `error=save&reason=${encodeURIComponent(error.message.slice(0, 200))}`));
+    }
+  }
+  await supabase
+    .from("entity_documents")
+    .update({ entity_id: targetId })
+    .eq("entity_type", "company")
+    .eq("entity_id", sourceId);
+
+  await supabase
+    .from("companies")
+    .update({ deleted_at: new Date().toISOString(), deleted_by_user_id: user?.appUserId ?? null })
+    .eq("id", sourceId);
+
+  await logActivity({
+    entityType: "companies",
+    entityId: targetId,
+    action: "merge",
+    before: { merged_from: sourceName, source_id: sourceId },
+  });
+
+  revalidatePath(returnPath);
+  revalidatePath("/customers");
+  redirect(withQuery(returnPath, "saved=1"));
+}
+
+export async function deleteCompanyAction(companyId: string) {
+  const user = await getSessionUser();
+  if (!isAdmin(user)) redirect(withQuery(`/customers/${companyId}`, "error=forbidden"));
+
+  const supabase = await createSupabaseServer();
+  const { count } = await supabase
+    .from("projects")
+    .select("*", { count: "exact", head: true })
+    .eq("company_id", companyId)
+    .is("deleted_at", null);
+  if ((count ?? 0) > 0) redirect(withQuery(`/customers/${companyId}`, "error=hasprojects"));
+
+  await supabase
+    .from("companies")
+    .update({ deleted_at: new Date().toISOString(), deleted_by_user_id: user?.appUserId ?? null })
+    .eq("id", companyId);
+  await logActivity({ entityType: "companies", entityId: companyId, action: "trash" });
+
+  revalidatePath("/customers");
+  redirect(withQuery("/customers", "trashed=1"));
+}
+
+// 주차 기록 삭제. '비우면 삭제' 라는 숨은 규칙 대신 화면에 버튼으로 드러낸다.
+export async function deleteWeeklyUpdateAction(updateId: string, label: string) {
+  const returnPath = `/weekly?label=${encodeURIComponent(label)}`;
+  const supabase = await createSupabaseServer();
+  const { error } = await supabase.from("project_weekly_updates").delete().eq("id", updateId);
+  if (error) {
+    console.error("deleteWeeklyUpdateAction", error.message);
+    redirect(withQuery(returnPath, `error=save&reason=${encodeURIComponent(error.message.slice(0, 200))}`));
+  }
+  revalidatePath(returnPath);
+  revalidatePath("/weekly/review");
+  redirect(withQuery(returnPath, "cleared=1"));
 }

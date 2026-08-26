@@ -30,7 +30,7 @@ npm run dev                  # http://localhost:3000
 |---|---|
 | 아키텍처 | Next.js 16.3 (App Router, RSC + Server Actions) + Supabase (Auth/DB/Storage) |
 | 배포 | Vercel, 함수 리전 도쿄(`hnd1`) 고정. GitHub `xyzplusco/XPERP` push 시 자동 배포 |
-| DB 스키마 | 마이그레이션 13건 전부 라이브 적용 완료 (2026-08-21 확인) |
+| DB 스키마 | 마이그레이션 16건 전부 라이브 적용 완료 (2026-08-23 확인) |
 | 인증 | Supabase Auth 이메일/비밀번호. `proxy.ts` 세션 가드 |
 | 권한 | owner / staff / member / viewer 4단계, RLS로 DB 레벨 강제 (§2) |
 | 문서 저장 | Storage `xp-documents`, `xp-meeting-notes` (private, signed URL) |
@@ -174,7 +174,7 @@ components/InviteeLookup.tsx # 이벤트 참석자 파트너 검색 추가 + 인
 components/InviteeManager.tsx / MeetingNotesPanel / DocumentsPanel / DealTable / SaveNotice
 
 scripts/                     # 엑셀 왕복·마이그레이션·계약 임포트·계정 생성 (§5)
-supabase/migrations/         # 13건, 전부 라이브 적용됨
+supabase/migrations/         # 16건, 전부 라이브 적용됨
 docs/permissions-plan.md     # 권한 재설계 기획
 docs/ux-roadmap.md           # UX 로드맵 1~3단계
 docs/schema-inventory.md     # 테이블별 운영/파생/이력/폐기 분류 — 스키마 건드리기 전에 읽을 것
@@ -197,6 +197,25 @@ docs/schema-inventory.md     # 테이블별 운영/파생/이력/폐기 분류 �
 
 테이블별 성격(운영·파생·이력 전용·폐기 후보)은 `docs/schema-inventory.md` 에 있다.
 **스키마를 지우기 전에 반드시 읽을 것.**
+
+## 3.35 프로젝트 3축 · 고객사 분류 (2026-08-22~23)
+
+프로젝트는 세 축으로 관리한다. **정본은 한글 필드다.**
+
+| 축 | 컬럼 | 값 |
+|---|---|---|
+| 구간 | `pipeline_stage` | 고객 · 협상 · 관리기업 · 파트너협업건 · 미정리후보 |
+| 상태 | `deal_status` | 계약 · 계약임박 · 제안 · 가망 · 관리 · 보류 · 미분류 |
+| 서비스섹터 | `service_sector` | Re-Engineering · Business Building · 투자·매각 · 영업 · Go Global · AX · 기타·미정 |
+
+영문 `status` 와 `contract_status` 는 **트리거가 파생**시킨다. 직접 쓰지 말 것.
+아카이브 판정은 `deal_status in ('관리','보류')`.
+
+고객사는 감추지 않는다. 화면에서 **고객사(프로젝트 있음) / 소속처(파트너만) / 미연결** 로 분류만 한다.
+`erp_customer_rows` 뷰는 폐기했다 — **숨기는 필터 뷰를 다시 만들지 말 것.** 안 보이면 고칠 수도 없다.
+
+회사명은 `companies_check_name` 트리거가 검사한다(이메일·전화번호·2자 미만 거부).
+파트너 '소속 회사' 칸 텍스트로 회사를 자동 생성하지 않는다 — 고객사 396건이 그렇게 생겼었다.
 
 ## 3.4 알림 구조
 

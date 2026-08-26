@@ -2,7 +2,7 @@ import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable"
 import { SaveNotice } from "@/components/SaveNotice";
 import { createEventAction } from "@/lib/actions";
 import { getEvents } from "@/lib/queries";
-import { getSessionUser, isOwner } from "@/lib/auth";
+import { getSessionUser, isAdmin } from "@/lib/auth";
 import { EVENT_STATUS_OPTIONS, formatDateTime, label } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -66,7 +66,7 @@ export default async function EventsPage({
       <div className="panel">
         <BulkTable
           storageKey="events"
-          canPaste={isOwner(user)}
+          canPaste={isAdmin(user)}
           entity="events"
           columns={columns}
           rows={rows}

@@ -9,9 +9,11 @@ import { getFolders, getPeopleNames, getProject, getProjectMeetingNotes } from "
 import {
   formatAmount,
   formatDate,
+  formatDateTime,
   label,
-  PROJECT_STATUS_OPTIONS,
-  PROJECT_TYPE_OPTIONS,
+  DEAL_STATUS_OPTIONS,
+  PIPELINE_STAGE_OPTIONS,
+  SERVICE_SECTOR_OPTIONS,
 } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -63,13 +65,13 @@ export default async function ProjectDetailPage({
         </div>
         <div className="detailTitleRow">
           <h1>{String(project.name ?? "")}</h1>
-          <span className="detailBadge">{label(String(project.status ?? ""))}</span>
+          <span className="detailBadge">{String(project.deal_status ?? "")}</span>
         </div>
         <div className="detailSub">
           {[
             company ? company.name_ko : null,
-            label(String(project.project_type ?? "")),
-            project.contract_status ? `계약: ${label(String(project.contract_status))}` : null,
+            String(project.pipeline_stage ?? ""),
+            String(project.service_sector ?? ""),
           ]
             .filter(Boolean)
             .join(" · ")}
@@ -158,12 +160,34 @@ export default async function ProjectDetailPage({
                 <span className="faintText">기록된 업데이트가 없습니다.</span>
               </div>
             ) : (
-              updates.slice(0, 20).map((update) => (
+              updates.slice(0, 20).map((update) => {
+                const author = Array.isArray(update.author) ? update.author[0] : update.author;
+                const person = author
+                  ? Array.isArray(author.person)
+                    ? author.person[0]
+                    : author.person
+                  : null;
+                const who = person?.name_ko ?? author?.email ?? null;
+                return (
                 <div className="updateItem" key={String(update.id)}>
-                  <div className="updateDate">{formatDate(update.update_date ?? update.update_label)}</div>
-                  <div className="updateBody">{update.body}</div>
+                  <div className="updateDate">{String(update.update_label ?? "")}</div>
+                  <div className="updateBody">
+                    {update.body}
+                    <div className="weeklyStamp">
+                      {[
+                        who ? `${who} 작성` : null,
+                        update.last_edited_at ? formatDateTime(String(update.last_edited_at)) : null,
+                        Number(update.edit_count ?? 0) > 0 ? `${update.edit_count}회 수정` : null,
+                        update.confirmed_at ? "확인됨" : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                    {update.review_note ? <div className="reviewNote">{String(update.review_note)}</div> : null}
+                  </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
           {editable ? (
@@ -338,18 +362,34 @@ export default async function ProjectDetailPage({
           <div className="panelBody">
             <form action={updateAction} className="formGrid">
               <div className="field">
-                <label>상태</label>
-                <select name="status" defaultValue={String(project.status ?? "discussing")}>
-                  {PROJECT_STATUS_OPTIONS.map((option) => (
+                <label>구간</label>
+                <select name="pipeline_stage" defaultValue={String(project.pipeline_stage ?? "미정리후보")}>
+                  {PIPELINE_STAGE_OPTIONS.map((option) => (
                     <option key={option} value={option}>
-                      {label(option)}
+                      {option}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="field">
-                <label>계약 상태</label>
-                <input name="contract_status" defaultValue={String(project.contract_status ?? "")} />
+                <label>상태</label>
+                <select name="deal_status" defaultValue={String(project.deal_status ?? "미분류")}>
+                  {DEAL_STATUS_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>서비스섹터</label>
+                <select name="service_sector" defaultValue={String(project.service_sector ?? "기타·미정")}>
+                  {SERVICE_SECTOR_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </div>
               {admin ? (
                 <div className="field">
@@ -359,18 +399,6 @@ export default async function ProjectDetailPage({
                     {folders.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-              {admin ? (
-                <div className="field">
-                  <label>유형</label>
-                  <select name="project_type" defaultValue={String(project.project_type ?? "unknown")}>
-                    {PROJECT_TYPE_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {label(option)}
                       </option>
                     ))}
                   </select>

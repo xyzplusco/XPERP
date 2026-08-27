@@ -2,7 +2,10 @@ import Link from "next/link";
 import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable";
 import { SaveNotice } from "@/components/SaveNotice";
 import { getPartners } from "@/lib/queries";
-import { getSessionUser, isAdmin } from "@/lib/auth";
+import { canWrite, getSessionUser } from "@/lib/auth";
+import { NewRecordDialog } from "@/components/NewRecordDialog";
+import { createPartnerAction } from "@/lib/actions";
+import { getCompanyNames } from "@/lib/queries";
 import { label, PARTNER_CLASS_OPTIONS, partnerClass } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +43,7 @@ export default async function PartnersPage({
   searchParams: Promise<{ class?: string; saved?: string; trashed?: string; error?: string }>;
 }) {
   const { class: classFilter, saved, trashed, error } = await searchParams;
-  const [user, partners] = await Promise.all([getSessionUser(), getPartners()]);
+  const [user, partners, companyNames] = await Promise.all([getSessionUser(), getPartners(), getCompanyNames()]);
 
   const withClass = partners.map((person) => ({
     ...person,
@@ -99,7 +102,20 @@ export default async function PartnersPage({
         <h1>파트너</h1>
         <div className="pageHeaderMeta">
           {classFilter ? `${classFilter} ${filtered.length}명 / 전체 ${withClass.length}명` : `${withClass.length}명`}
-
+          {canWrite(user) ? (
+            <NewRecordDialog
+              label="새 파트너"
+              action={createPartnerAction}
+              fields={[
+                { name: "name_ko", label: "이름", required: true },
+                { name: "company_name", label: "소속", listId: "new-partner-companies", listValues: companyNames },
+                { name: "title", label: "직함" },
+                { name: "email", label: "이메일", type: "email" },
+                { name: "phone", label: "연락처" },
+                { name: "partner_status", label: "구분", type: "select", options: [...PARTNER_CLASS_OPTIONS] },
+              ]}
+            />
+          ) : null}
         </div>
       </div>
 
@@ -133,7 +149,6 @@ export default async function PartnersPage({
       <div className="panel">
         <BulkTable
           storageKey="partners"
-          canPaste={isAdmin(user)}
           entity="people"
           columns={columns}
           rows={rows}

@@ -25,6 +25,7 @@ export function SaveNotice({
     weak: "비밀번호는 8자 이상이어야 합니다.",
     mismatch: "두 비밀번호가 다릅니다.",
     company: "해당 이름의 고객사를 찾을 수 없습니다.",
+    scope: "프로젝트 또는 고객사 중 하나는 지정해야 합니다.",
     hasprojects: "프로젝트가 연결돼 있어 삭제할 수 없습니다. 프로젝트를 먼저 옮기거나 정리하세요.",
   };
   return (

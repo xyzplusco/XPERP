@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSupabaseServer } from "@/lib/supabase/server";
-import { canSeeRevenue, getSessionUser, isAdmin, isOwner } from "@/lib/auth";
+import { canSeeRevenue, canWrite, getSessionUser, isAdmin, isOwner } from "@/lib/auth";
 import { createSupabaseAdmin, generatePassword } from "@/lib/supabase/admin";
 import { getAssignablePeople, getProjectOptions } from "@/lib/queries";
 import { adminUserIds, notify, userIdsForPeople } from "@/lib/notifications";
@@ -524,11 +524,11 @@ export async function deleteMeetingNoteAction(noteId: string, returnPath: string
   redirect(withQuery(returnPath, `saved=1`));
 }
 
-// ---------------------------------------------------------------- 티켓
+// ---------------------------------------------------------------- 과제
 
-export async function createTicketAction(formData: FormData) {
+export async function createTaskAction(formData: FormData) {
   const title = text(formData, "title");
-  const returnPath = text(formData, "return_path") ?? "/tickets";
+  const returnPath = text(formData, "return_path") ?? "/tasks";
   if (!title) redirect(withQuery(returnPath, `error=empty`));
 
   const supabase = await createSupabaseServer();
@@ -550,7 +550,7 @@ export async function createTicketAction(formData: FormData) {
     .select("id")
     .single();
   if (error) {
-    console.error("createTicketAction", error.message);
+    console.error("createTaskAction", error.message);
     redirect(withQuery(returnPath, `error=save`));
   }
 
@@ -559,20 +559,20 @@ export async function createTicketAction(formData: FormData) {
       recipientUserIds: await userIdsForPeople([assigneePersonId]),
       actorUserId: user?.appUserId,
       kind: "ticket_assigned",
-      title: `티켓 배정 — ${title}`,
-      link: `/tickets/${created.id}`,
+      title: `과제 배정 — ${title}`,
+      link: `/tasks/${created.id}`,
       entityType: "task",
       entityId: created.id,
     });
   }
 
-  revalidatePath("/tickets");
+  revalidatePath("/tasks");
   revalidatePath(returnPath);
   redirect(withQuery(returnPath, `saved=1`));
 }
 
-export async function updateTicketAction(ticketId: string, formData: FormData) {
-  const returnPath = text(formData, "return_path") ?? "/tickets";
+export async function updateTaskAction(taskId: string, formData: FormData) {
+  const returnPath = text(formData, "return_path") ?? "/tasks";
   const supabase = await createSupabaseServer();
 
   const payload: Record<string, string | null> = {};
@@ -595,12 +595,12 @@ export async function updateTicketAction(ticketId: string, formData: FormData) {
   const { data: before } = await supabase
     .from("tasks")
     .select("assignee_person_id, title")
-    .eq("id", ticketId)
+    .eq("id", taskId)
     .maybeSingle();
 
-  const { error } = await supabase.from("tasks").update(payload).eq("id", ticketId);
+  const { error } = await supabase.from("tasks").update(payload).eq("id", taskId);
   if (error) {
-    console.error("updateTicketAction", error.message);
+    console.error("updateTaskAction", error.message);
     redirect(withQuery(returnPath, `error=save`));
   }
 
@@ -610,32 +610,32 @@ export async function updateTicketAction(ticketId: string, formData: FormData) {
       recipientUserIds: await userIdsForPeople([payload.assignee_person_id]),
       actorUserId: user?.appUserId,
       kind: "ticket_assigned",
-      title: `티켓 배정 — ${payload.title ?? before?.title ?? ""}`,
-      link: `/tickets/${ticketId}`,
+      title: `과제 배정 — ${payload.title ?? before?.title ?? ""}`,
+      link: `/tasks/${taskId}`,
       entityType: "task",
-      entityId: ticketId,
+      entityId: taskId,
     });
   }
 
-  revalidatePath("/tickets");
+  revalidatePath("/tasks");
   revalidatePath(returnPath);
   redirect(withQuery(returnPath, `saved=1`));
 }
 
 // 목록의 일괄 삭제(bulkTrashAction)와 동작을 맞춘다. 하드 삭제가 아니라 휴지통행이다.
-export async function deleteTicketAction(ticketId: string, returnPath: string) {
+export async function deleteTaskAction(taskId: string, returnPath: string) {
   const supabase = await createSupabaseServer();
   const user = await getSessionUser();
   const { error } = await supabase
     .from("tasks")
     .update({ deleted_at: new Date().toISOString(), deleted_by_user_id: user?.appUserId ?? null })
-    .eq("id", ticketId);
-  await logActivity({ entityType: "tasks", entityId: ticketId, action: "trash" });
+    .eq("id", taskId);
+  await logActivity({ entityType: "tasks", entityId: taskId, action: "trash" });
   if (error) {
-    console.error("deleteTicketAction", error.message);
+    console.error("deleteTaskAction", error.message);
     redirect(withQuery(returnPath, `error=forbidden`));
   }
-  revalidatePath("/tickets");
+  revalidatePath("/tasks");
   revalidatePath(returnPath);
   redirect(withQuery(returnPath, `saved=1`));
 }
@@ -1252,78 +1252,12 @@ export async function createPersonAndInviteAction(
   return { ok: true, message: `${name} 신규 등록 후 추가됨` };
 }
 
-// 티켓 창을 열 때만 담당자·프로젝트 목록을 가져온다 (사이드바 때문에 전 페이지가 느려지지 않도록).
-export async function getTicketOptionsAction() {
+// 과제 창을 열 때만 담당자·프로젝트 목록을 가져온다 (사이드바 때문에 전 페이지가 느려지지 않도록).
+export async function getTaskOptionsAction() {
   const user = await getSessionUser();
   if (!user?.appUserId) return { assignables: [], projects: [] };
   const [assignables, projects] = await Promise.all([getAssignablePeople(), getProjectOptions()]);
   return { assignables, projects };
-}
-
-// 엑셀에서 복사한 표를 그대로 붙여넣어 여러 칸을 한 번에 고친다. 마스터 어드민 전용.
-export async function gridUpdateAction(
-  entity: string,
-  cells: { id: string; field: string; value: string }[]
-): Promise<{ ok: boolean; results: { id: string; field: string; ok: boolean; message: string }[] }> {
-  const results: { id: string; field: string; ok: boolean; message: string }[] = [];
-  const reject = (message: string) => ({
-    ok: false,
-    results: cells.map((cell) => ({ id: cell.id, field: cell.field, ok: false, message })),
-  });
-
-  if (!isValidEntity(entity)) return reject("잘못된 대상입니다.");
-  if (cells.length === 0) return { ok: true, results };
-  if (cells.length > 2000) return reject("한 번에 2000칸까지 붙여넣을 수 있습니다.");
-
-  const user = await getSessionUser();
-  if (!isAdmin(user)) return reject("전사 편집 권한이 있는 계정만 붙여넣기로 수정할 수 있습니다.");
-
-  const supabase = await createSupabaseServer();
-
-  // 같은 (필드, 값) 끼리 묶어 왕복 횟수를 줄인다.
-  const groups = new Map<string, { field: string; value: string | number | null; ids: string[]; profile: boolean }>();
-
-  for (const cell of cells) {
-    const isProfileField = entity === "people" && cell.field in PROFILE_EDITABLE;
-    const spec = isProfileField ? PROFILE_EDITABLE[cell.field] : EDITABLE[entity as EntityKey][cell.field];
-    const validated = validateField(spec, cell.value);
-    if (!validated.ok) {
-      results.push({ id: cell.id, field: cell.field, ok: false, message: validated.reason });
-      continue;
-    }
-    const key = `${isProfileField ? "p" : "e"}|${cell.field}|${String(validated.value)}`;
-    const group = groups.get(key) ?? { field: cell.field, value: validated.value, ids: [], profile: isProfileField };
-    group.ids.push(cell.id);
-    groups.set(key, group);
-  }
-
-  for (const group of groups.values()) {
-    const { error } = group.profile
-      ? await supabase.from("network_profiles").upsert(
-          group.ids.map((personId) => ({
-            person_id: personId,
-            network_segment: "unknown",
-            [group.field]: group.value,
-          })),
-          { onConflict: "person_id" }
-        )
-      : await supabase.from(entity).update({ [group.field]: group.value }).in("id", group.ids);
-
-    for (const id of group.ids) {
-      results.push({
-        id,
-        field: group.field,
-        ok: !error,
-        message: error ? error.message : "저장됨",
-      });
-    }
-  }
-
-  for (const row of results.filter((r) => r.ok)) {
-    await logActivity({ entityType: entity, entityId: row.id, action: "grid_paste", after: { [row.field]: true } });
-  }
-
-  return { ok: results.every((r) => r.ok), results };
 }
 
 // 본인 비밀번호 변경.
@@ -1440,10 +1374,10 @@ export async function requestWeeklyReviewAction(updateId: string, formData: Form
   redirect(returnPath);
 }
 
-// ── 티켓 댓글 ───────────────────────────────────────────────────────────────
+// ── 과제 댓글 ───────────────────────────────────────────────────────────────
 export async function addTaskCommentAction(taskId: string, formData: FormData) {
   const body = text(formData, "body");
-  const returnPath = `/tickets/${taskId}`;
+  const returnPath = `/tasks/${taskId}`;
   if (!body) redirect(withQuery(returnPath, `error=empty`));
 
   const user = await getSessionUser();
@@ -1482,12 +1416,12 @@ export async function addTaskCommentAction(taskId: string, formData: FormData) {
 export async function deleteTaskCommentAction(commentId: string, taskId: string) {
   const supabase = await createSupabaseServer();
   await supabase.from("task_comments").delete().eq("id", commentId);
-  revalidatePath(`/tickets/${taskId}`);
+  revalidatePath(`/tasks/${taskId}`);
 }
 
-// 티켓 상세 편집 (상세 화면 폼)
-export async function updateTicketDetailAction(taskId: string, formData: FormData) {
-  const returnPath = `/tickets/${taskId}`;
+// 과제 상세 편집 (상세 화면 폼)
+export async function updateTaskDetailAction(taskId: string, formData: FormData) {
+  const returnPath = `/tasks/${taskId}`;
   const supabase = await createSupabaseServer();
   const user = await getSessionUser();
 
@@ -1510,7 +1444,7 @@ export async function updateTicketDetailAction(taskId: string, formData: FormDat
 
   const { error } = await supabase.from("tasks").update(payload).eq("id", taskId);
   if (error) {
-    console.error("updateTicketDetailAction", error.message);
+    console.error("updateTaskDetailAction", error.message);
     redirect(withQuery(returnPath, `error=save&reason=${encodeURIComponent(error.message.slice(0, 200))}`));
   }
 
@@ -1520,7 +1454,7 @@ export async function updateTicketDetailAction(taskId: string, formData: FormDat
       recipientUserIds: recipients,
       actorUserId: user?.appUserId,
       kind: "ticket_assigned",
-      title: `티켓 배정 — ${payload.title}`,
+      title: `과제 배정 — ${payload.title}`,
       link: returnPath,
       entityType: "task",
       entityId: taskId,
@@ -1528,7 +1462,7 @@ export async function updateTicketDetailAction(taskId: string, formData: FormDat
   }
 
   revalidatePath(returnPath);
-  revalidatePath("/tickets");
+  revalidatePath("/tasks");
   redirect(withQuery(returnPath, `saved=1`));
 }
 
@@ -1656,4 +1590,296 @@ export async function deleteWeeklyUpdateAction(updateId: string, label: string) 
   revalidatePath(returnPath);
   revalidatePath("/weekly/review");
   redirect(withQuery(returnPath, "cleared=1"));
+}
+
+// ── 신규 등록 ───────────────────────────────────────────────────────────────
+export async function createCompanyAction(formData: FormData) {
+  const name = text(formData, "name_ko");
+  if (!name) redirect(withQuery("/customers", "error=empty"));
+
+  const user = await getSessionUser();
+  if (!canWrite(user)) redirect(withQuery("/customers", "error=forbidden"));
+
+  const supabase = await createSupabaseServer();
+  const { data, error } = await supabase
+    .from("companies")
+    .insert({
+      name_ko: name,
+      industry: text(formData, "industry"),
+      representative_name: text(formData, "representative_name"),
+      website_url: text(formData, "website_url"),
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("createCompanyAction", error?.message);
+    redirect(withQuery("/customers", `error=save&reason=${encodeURIComponent((error?.message ?? "").slice(0, 200))}`));
+  }
+  await logActivity({ entityType: "companies", entityId: data.id, action: "create" });
+  revalidatePath("/customers");
+  redirect(`/customers/${data.id}?saved=1`);
+}
+
+export async function createPartnerAction(formData: FormData) {
+  const name = text(formData, "name_ko");
+  if (!name) redirect(withQuery("/partners", "error=empty"));
+
+  const user = await getSessionUser();
+  if (!canWrite(user)) redirect(withQuery("/partners", "error=forbidden"));
+
+  const supabase = await createSupabaseServer();
+
+  // 소속은 기존 고객사에 있을 때만 연결한다. 텍스트로 새 회사를 만들지 않는다.
+  let companyId: string | null = null;
+  const companyName = text(formData, "company_name");
+  if (companyName) {
+    const { data: hit } = await supabase
+      .from("companies").select("id").eq("name_ko", companyName).is("deleted_at", null).limit(2);
+    if (hit && hit.length === 1) companyId = hit[0].id;
+  }
+
+  const { data, error } = await supabase
+    .from("people")
+    .insert({
+      name_ko: name,
+      title: text(formData, "title"),
+      email: text(formData, "email"),
+      phone: text(formData, "phone"),
+      primary_company_id: companyId,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("createPartnerAction", error?.message);
+    redirect(withQuery("/partners", `error=save&reason=${encodeURIComponent((error?.message ?? "").slice(0, 200))}`));
+  }
+
+  await supabase.from("network_profiles").insert({
+    person_id: data.id,
+    network_segment: "unknown",
+    partner_status: text(formData, "partner_status"),
+  });
+  await logActivity({ entityType: "people", entityId: data.id, action: "create" });
+  revalidatePath("/partners");
+  redirect(`/partners/${data.id}?saved=1`);
+}
+
+export async function createProjectAction(formData: FormData) {
+  const name = text(formData, "name");
+  if (!name) redirect(withQuery("/projects", "error=empty"));
+
+  const user = await getSessionUser();
+  if (!canWrite(user)) redirect(withQuery("/projects", "error=forbidden"));
+
+  const supabase = await createSupabaseServer();
+
+  let companyId: string | null = null;
+  const companyName = text(formData, "company_name");
+  if (companyName) {
+    const { data: hit } = await supabase
+      .from("companies").select("id").eq("name_ko", companyName).is("deleted_at", null).limit(2);
+    if (hit && hit.length === 1) companyId = hit[0].id;
+    else redirect(withQuery("/projects", "error=company"));
+  }
+
+  const { data, error } = await supabase
+    .from("projects")
+    .insert({
+      name,
+      company_id: companyId,
+      pipeline_stage: text(formData, "pipeline_stage") ?? "미정리후보",
+      deal_status: text(formData, "deal_status") ?? "미분류",
+      service_sector: text(formData, "service_sector") ?? "기타·미정",
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("createProjectAction", error?.message);
+    redirect(withQuery("/projects", `error=save&reason=${encodeURIComponent((error?.message ?? "").slice(0, 200))}`));
+  }
+  await logActivity({ entityType: "projects", entityId: data.id, action: "create" });
+  revalidatePath("/projects");
+  redirect(`/projects/${data.id}?saved=1`);
+}
+
+// ── 회의록 ──────────────────────────────────────────────────────────────────
+// 녹음(mp3·m4a 등)이나 문서를 올린다. 녹음이면 ai_status='pending' 으로 두고,
+// 전사·요약은 나중에 붙일 처리기가 가져간다.
+const AUDIO_EXT = /\.(mp3|m4a|wav|aac|ogg|webm|mp4)$/i;
+
+export async function uploadMeetingAction(formData: FormData) {
+  const returnPath = "/meetings";
+  const user = await getSessionUser();
+  if (!canWrite(user)) redirect(withQuery(returnPath, "error=forbidden"));
+
+  const title = text(formData, "title");
+  const meetingDate = text(formData, "meeting_date");
+  if (!title || !meetingDate) redirect(withQuery(returnPath, "error=empty"));
+
+  const supabase = await createSupabaseServer();
+
+  // 연결 대상: 프로젝트 또는 고객사 (이름으로 찾는다)
+  let projectId: string | null = null;
+  let companyId: string | null = null;
+  const projectName = text(formData, "project_name");
+  const companyName = text(formData, "company_name");
+  if (projectName) {
+    const { data } = await supabase.from("projects").select("id, company_id").eq("name", projectName).is("deleted_at", null).limit(2);
+    if (data?.length === 1) { projectId = data[0].id; companyId = data[0].company_id; }
+  }
+  if (!projectId && companyName) {
+    const { data } = await supabase.from("companies").select("id").eq("name_ko", companyName).is("deleted_at", null).limit(2);
+    if (data?.length === 1) companyId = data[0].id;
+  }
+  if (!projectId && !companyId) redirect(withQuery(returnPath, "error=scope"));
+
+  const scope = projectId ? `project/${projectId}` : `company/${companyId}`;
+  const file = formData.get("file");
+  let audioPath: string | null = null;
+  let docPath: string | null = null;
+  let fileName: string | null = null;
+  let mime: string | null = null;
+  let size: number | null = null;
+
+  if (file instanceof File && file.size > 0) {
+    if (file.size > 200 * 1024 * 1024) redirect(withQuery(returnPath, "error=toobig"));
+    const safeName = file.name.replace(/[^\w.\-가-힣 ]/g, "_");
+    const isAudio = AUDIO_EXT.test(file.name);
+    const bucket = isAudio ? "xp-meeting-audio" : "xp-meeting-notes";
+    const path = `${scope}/${meetingDate}_${Date.now()}_${safeName}`;
+    const buffer = await file.arrayBuffer();
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(path, buffer, { contentType: file.type || "application/octet-stream" });
+    if (error) {
+      console.error("uploadMeetingAction storage", error.message);
+      redirect(withQuery(returnPath, `error=upload&reason=${encodeURIComponent(error.message.slice(0, 200))}`));
+    }
+    if (isAudio) audioPath = path;
+    else docPath = path;
+    fileName = file.name;
+    mime = file.type || null;
+    size = file.size;
+  }
+
+  const { data, error } = await supabase
+    .from("meeting_notes")
+    .insert({
+      project_id: projectId,
+      company_id: companyId,
+      title,
+      meeting_date: meetingDate,
+      attendees: text(formData, "attendees"),
+      summary: text(formData, "summary"),
+      storage_bucket: docPath ? "xp-meeting-notes" : null,
+      storage_path: docPath,
+      audio_bucket: audioPath ? "xp-meeting-audio" : null,
+      audio_path: audioPath,
+      file_name: fileName,
+      mime_type: mime,
+      file_size: size,
+      uploaded_by_user_id: user?.appUserId ?? null,
+      // 녹음이 올라왔으면 처리 대기로 둔다. 전사·요약기는 나중에 붙인다.
+      ai_status: audioPath ? "pending" : "none",
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    console.error("uploadMeetingAction insert", error?.message);
+    redirect(withQuery(returnPath, `error=save&reason=${encodeURIComponent((error?.message ?? "").slice(0, 200))}`));
+  }
+
+  await logActivity({ entityType: "meeting_notes", entityId: data.id, action: "create" });
+  revalidatePath(returnPath);
+  redirect(`/meetings/${data.id}?saved=1`);
+}
+
+export async function addActionItemAction(meetingId: string, formData: FormData) {
+  const returnPath = `/meetings/${meetingId}`;
+  const body = text(formData, "body");
+  if (!body) redirect(withQuery(returnPath, "error=empty"));
+
+  const supabase = await createSupabaseServer();
+  const assignee = await findPersonIdByName(text(formData, "assignee_name"));
+
+  const { error } = await supabase.from("meeting_action_items").insert({
+    meeting_note_id: meetingId,
+    body,
+    assignee_person_id: assignee === undefined ? null : assignee,
+    due_date: text(formData, "due_date"),
+    origin: "manual",
+  });
+  if (error) {
+    console.error("addActionItemAction", error.message);
+    redirect(withQuery(returnPath, `error=save&reason=${encodeURIComponent(error.message.slice(0, 200))}`));
+  }
+  revalidatePath(returnPath);
+  redirect(withQuery(returnPath, "saved=1"));
+}
+
+// 액션 아이템을 과제로 승격한다.
+export async function promoteActionItemAction(itemId: string, meetingId: string) {
+  const returnPath = `/meetings/${meetingId}`;
+  const user = await getSessionUser();
+  const supabase = await createSupabaseServer();
+
+  const { data: item } = await supabase
+    .from("meeting_action_items")
+    .select("body, assignee_person_id, due_date, meeting:meeting_notes!meeting_action_items_meeting_note_id_fkey(project_id, company_id, title)")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (!item) redirect(withQuery(returnPath, "error=empty"));
+
+  const meeting = Array.isArray(item.meeting) ? item.meeting[0] : item.meeting;
+  const { data: task, error } = await supabase
+    .from("tasks")
+    .insert({
+      title: item.body,
+      description: meeting?.title ? `회의록: ${meeting.title}` : null,
+      status: "backlog",
+      project_id: meeting?.project_id ?? null,
+      company_id: meeting?.company_id ?? null,
+      assignee_person_id: item.assignee_person_id,
+      due_date: item.due_date,
+      created_by_user_id: user?.appUserId ?? null,
+    })
+    .select("id")
+    .single();
+  if (error || !task) {
+    console.error("promoteActionItemAction", error?.message);
+    redirect(withQuery(returnPath, `error=save&reason=${encodeURIComponent((error?.message ?? "").slice(0, 200))}`));
+  }
+
+  await supabase.from("meeting_action_items").update({ task_id: task.id }).eq("id", itemId);
+
+  if (item.assignee_person_id) {
+    await notify({
+      recipientUserIds: await userIdsForPeople([item.assignee_person_id]),
+      actorUserId: user?.appUserId,
+      kind: "ticket_assigned",
+      title: `과제 배정 — ${item.body}`,
+      link: `/tasks/${task.id}`,
+      entityType: "task",
+      entityId: task.id,
+    });
+  }
+
+  revalidatePath(returnPath);
+  redirect(withQuery(returnPath, "saved=1"));
+}
+
+export async function dismissActionItemAction(itemId: string, meetingId: string) {
+  const supabase = await createSupabaseServer();
+  await supabase.from("meeting_action_items").update({ dismissed_at: new Date().toISOString() }).eq("id", itemId);
+  revalidatePath(`/meetings/${meetingId}`);
+}
+
+export async function deleteMeetingAction(meetingId: string) {
+  const user = await getSessionUser();
+  if (!isAdmin(user)) redirect(withQuery(`/meetings/${meetingId}`, "error=forbidden"));
+  const supabase = await createSupabaseServer();
+  await supabase.from("meeting_notes").delete().eq("id", meetingId);
+  revalidatePath("/meetings");
+  redirect(withQuery("/meetings", "saved=1"));
 }

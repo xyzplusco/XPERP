@@ -119,6 +119,16 @@ export const SERVICE_SECTOR_OPTIONS = [
 // 아카이브 = 더 진행하지 않는 것
 export const ARCHIVED_DEAL_STATUS = new Set<string>(["관리", "보류"]);
 
+// 한 고객사에 프로젝트가 여러 개면 이 순서로 앞선 상태를 대표로 쓴다.
+export const DEAL_STATUS_PRIORITY: string[] = [
+  "계약", "계약임박", "제안", "가망", "관리", "보류", "미분류",
+];
+
+export function topDealStatus(statuses: string[]): string {
+  for (const s of DEAL_STATUS_PRIORITY) if (statuses.includes(s)) return s;
+  return "";
+}
+
 // 파트너 구분 (partner_status에 저장)
 export const PARTNER_CLASS_OPTIONS = ["임원", "직원", "파트너", "파트너 후보", "협력사", "고객사 담당자", "외부 전문가", "기타"] as const;
 

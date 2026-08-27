@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { bulkTrashAction, bulkUpdateAction, gridUpdateAction, inlineUpdateAction } from "@/lib/actions";
+import { bulkTrashAction, bulkUpdateAction, inlineUpdateAction } from "@/lib/actions";
 
 export type ColumnDef = {
   key: string;
@@ -42,7 +42,6 @@ export function BulkTable({
   returnPath,
   emptyText = "표시할 항목이 없습니다.",
   storageKey,
-  canPaste = false,
 }: {
   entity: string;
   columns: ColumnDef[];
@@ -51,7 +50,6 @@ export function BulkTable({
   returnPath: string;
   emptyText?: string;
   storageKey?: string;
-  canPaste?: boolean;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [active, setActive] = useState<{ r: number; c: number } | null>(null);
@@ -61,9 +59,6 @@ export function BulkTable({
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
   const [activeBulk, setActiveBulk] = useState(bulkActions[0]?.field ?? "");
-  const [pasteOpen, setPasteOpen] = useState(false);
-  const [pasteText, setPasteText] = useState("");
-  const [pasteStart, setPasteStart] = useState({ r: 0, c: columns.findIndex((c) => c.kind && c.kind !== "readonly") });
   const gridRef = useRef<HTMLDivElement>(null);
 
   const widthKey = `xp.cols.${storageKey ?? entity}`;
@@ -189,60 +184,6 @@ export function BulkTable({
     });
   };
 
-  const editableColumns = columns.filter((c) => c.kind && c.kind !== "readonly");
-
-  const applyPaste = (text: string, start: { r: number; c: number }) => {
-    const matrix = text
-      .replace(/\r/g, "")
-      .split("\n")
-      .filter((line, index, all) => line !== "" || index < all.length - 1)
-      .map((line) => line.split("\t"));
-
-    const cells: { id: string; field: string; value: string }[] = [];
-    const revert: { id: string; key: string; before: Override }[] = [];
-
-    matrix.forEach((line, rowOffset) => {
-      const row = rows[start.r + rowOffset];
-      if (!row) return;
-      line.forEach((cellText, colOffset) => {
-        const column = columns[start.c + colOffset];
-        if (!column || !column.kind || column.kind === "readonly") return;
-        const nextRaw = rawFromPasted(column, cellText);
-        const before = valueOf(row, column);
-        if (nextRaw === before.raw) return;
-        revert.push({ id: row.id, key: column.key, before });
-        applyOverride(row.id, column.key, { raw: nextRaw, display: labelFor(column, nextRaw) });
-        cells.push({ id: row.id, field: column.key, value: nextRaw });
-      });
-    });
-
-    if (cells.length === 0) return;
-    setMessage(`${cells.length}칸 반영 중`);
-
-    startTransition(async () => {
-      const result = await gridUpdateAction(entity, cells);
-      const failures = result.results.filter((r) => !r.ok);
-      for (const failure of failures) {
-        const original = revert.find((v) => v.id === failure.id && v.key === failure.field);
-        if (original) applyOverride(failure.id, failure.field, original.before);
-        markFailed(failure.id, failure.field, true);
-      }
-      setMessage(
-        failures.length === 0
-          ? `${cells.length}칸 저장됨`
-          : `${cells.length - failures.length}칸 저장 · ${failures.length}칸 실패 — ${failures[0].message}`
-      );
-    });
-  };
-
-  const onPaste = (event: React.ClipboardEvent) => {
-    if (!canPaste || editing || !active) return;
-    const text = event.clipboardData.getData("text/plain");
-    if (!text || (!text.includes("\t") && !text.includes("\n"))) return;
-    event.preventDefault();
-    applyPaste(text, active);
-  };
-
   const move = (dr: number, dc: number) => {
     setActive((current) => {
       if (!current) return { r: 0, c: 0 };
@@ -343,94 +284,17 @@ export function BulkTable({
       ) : null}
 
       <div className="gridBar">
-        {canPaste ? (
-          <button className="smallButton" type="button" onClick={() => setPasteOpen(true)}>
-            엑셀 붙여넣기
-          </button>
-        ) : null}
         <button className="smallButton" type="button" onClick={resetWidths}>
           열 너비 초기화
         </button>
         {message ? <span className="gridMessage">{message}</span> : null}
       </div>
 
-      {pasteOpen ? (
-        <div className="modalBackdrop" onClick={() => setPasteOpen(false)}>
-          <div className="modalCard" onClick={(event) => event.stopPropagation()}>
-            <div className="modalHeader">
-              <span>엑셀 붙여넣기</span>
-              <button className="smallButton" type="button" onClick={() => setPasteOpen(false)}>
-                닫기
-              </button>
-            </div>
-            <div className="modalBody">
-              <div className="modalRow">
-                <div className="field">
-                  <label>시작 행</label>
-                  <select
-                    value={pasteStart.r}
-                    onChange={(event) => setPasteStart((v) => ({ ...v, r: Number(event.target.value) }))}
-                  >
-                    {rows.map((row, index) => (
-                      <option key={row.id} value={index}>
-                        {index + 1}. {row.display[columns[0].key] || row.display[columns[1]?.key] || row.id.slice(0, 8)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>시작 열</label>
-                  <select
-                    value={pasteStart.c}
-                    onChange={(event) => setPasteStart((v) => ({ ...v, c: Number(event.target.value) }))}
-                  >
-                    {columns.map((column, index) =>
-                      column.kind && column.kind !== "readonly" ? (
-                        <option key={column.key} value={index}>
-                          {column.header}
-                        </option>
-                      ) : null
-                    )}
-                  </select>
-                </div>
-              </div>
-              <div className="field">
-                <label>붙여넣기</label>
-                <textarea
-                  rows={10}
-                  value={pasteText}
-                  onChange={(event) => setPasteText(event.target.value)}
-                  autoFocus
-                />
-              </div>
-              <div className="formActions">
-                <button className="secondaryButton" type="button" onClick={() => setPasteOpen(false)}>
-                  취소
-                </button>
-                <button
-                  className="primaryButton"
-                  type="button"
-                  disabled={!pasteText.trim() || pending}
-                  onClick={() => {
-                    applyPaste(pasteText, pasteStart);
-                    setPasteText("");
-                    setPasteOpen(false);
-                  }}
-                >
-                  적용
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <div
         className="tableWrap gridWrap"
         ref={gridRef}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        onPaste={onPaste}
       >
         <table className="gridTable" style={{ width: totalWidth, minWidth: "100%" }}>
           <colgroup>

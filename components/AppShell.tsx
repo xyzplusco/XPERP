@@ -4,7 +4,7 @@ import { signOutAction } from "@/lib/actions";
 
 import { ROLE_LABEL, type SessionUser } from "@/lib/auth";
 import { NavLinks } from "@/components/NavLinks";
-import { TicketDialog } from "@/components/TicketDialog";
+import { TaskDialog } from "@/components/TaskDialog";
 import { getUnreadCount } from "@/lib/notifications";
 
 export async function AppShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
@@ -20,7 +20,7 @@ export async function AppShell({ user, children }: { user: SessionUser; children
           <NavLinks items={navigationFor(user)} badges={{ "/inbox": unread }} />
         </nav>
         <div className="sidebarActions">
-          <TicketDialog />
+          <TaskDialog />
         </div>
         <div className="sidebarFooter">
           <div className="userEmail">{user.personName ?? user.email}</div>

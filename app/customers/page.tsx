@@ -2,7 +2,10 @@ import Link from "next/link";
 import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable";
 import { SaveNotice } from "@/components/SaveNotice";
 import { getCustomers } from "@/lib/queries";
-import { getSessionUser, isAdmin } from "@/lib/auth";
+import { canWrite, getSessionUser } from "@/lib/auth";
+import { NewRecordDialog } from "@/components/NewRecordDialog";
+import { createCompanyAction } from "@/lib/actions";
+import { DEAL_STATUS_OPTIONS } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +28,7 @@ export default async function CustomersPage({
   const customers = kind === "전체" ? all : all.filter((r) => r.kind === kind);
 
   const columns: ColumnDef[] = [
-    { key: "customer_id", header: "ID", width: 90, kind: "readonly" },
-    { key: "name_ko", header: "고객사", width: 180, kind: "text" },
+    { key: "name_ko", header: "고객사", width: 190, kind: "text" },
     { key: "kind", header: "구분", width: 80, kind: "readonly" },
     { key: "industry", header: "산업", width: 130, kind: "text" },
     { key: "representative_name", header: "대표", width: 100, kind: "text" },
@@ -42,7 +44,6 @@ export default async function CustomersPage({
     href: `/customers/${row.id}`,
     linkKey: "name_ko",
     display: {
-      customer_id: row.customer_id,
       name_ko: row.customer,
       kind: row.kind,
       industry: row.industry,
@@ -67,7 +68,21 @@ export default async function CustomersPage({
     <>
       <div className="pageHeader">
         <h1>고객사</h1>
-        <div className="pageHeaderMeta">{customers.length}개사</div>
+        <div className="pageHeaderMeta">
+          {customers.length}개사
+          {canWrite(user) ? (
+            <NewRecordDialog
+              label="새 고객사"
+              action={createCompanyAction}
+              fields={[
+                { name: "name_ko", label: "고객사명", required: true },
+                { name: "industry", label: "산업" },
+                { name: "representative_name", label: "대표" },
+                { name: "website_url", label: "웹사이트" },
+              ]}
+            />
+          ) : null}
+        </div>
       </div>
 
       <SaveNotice saved={saved ?? trashed} error={error} />
@@ -88,7 +103,6 @@ export default async function CustomersPage({
       <div className="panel">
         <BulkTable
           storageKey="customers"
-          canPaste={isAdmin(user)}
           entity="companies"
           columns={columns}
           rows={rows}

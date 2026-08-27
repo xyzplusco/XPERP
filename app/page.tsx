@@ -18,9 +18,9 @@ export default async function HomePage() {
   ]);
 
   const today = new Date().toISOString().slice(0, 10);
-  const overdue = work.tickets.filter((t) => t.due_date && t.due_date < today);
-  const dueToday = work.tickets.filter((t) => t.due_date === today);
-  const noDate = work.tickets.filter((t) => !t.due_date);
+  const overdue = work.tasks.filter((t) => t.due_date && t.due_date < today);
+  const dueToday = work.tasks.filter((t) => t.due_date === today);
+  const noDate = work.tasks.filter((t) => !t.due_date);
 
   const unwritten = work.projects.filter((p) => p.lastUpdateLabel !== week.label);
   const stale = work.projects.filter((p) => {
@@ -39,7 +39,7 @@ export default async function HomePage() {
 
       <div className="statRow">
         <div className="statCell">
-          <div className="statLabel">기한 지난 티켓</div>
+          <div className="statLabel">기한 지난 과제</div>
           <div className="statValue">{overdue.length}</div>
         </div>
         <div className="statCell">
@@ -47,8 +47,8 @@ export default async function HomePage() {
           <div className="statValue">{dueToday.length}</div>
         </div>
         <div className="statCell">
-          <div className="statLabel">내 티켓 전체</div>
-          <div className="statValue">{work.tickets.length}</div>
+          <div className="statLabel">내 과제 전체</div>
+          <div className="statValue">{work.tasks.length}</div>
         </div>
         <div className="statCell">
           <div className="statLabel">내 프로젝트</div>
@@ -73,8 +73,8 @@ export default async function HomePage() {
       <div className="workGrid">
         <div className="panel">
           <div className="panelHeader">
-            <div className="panelTitle">내 티켓</div>
-            <Link className="smallButton" href="/tickets?scope=open">
+            <div className="panelTitle">내 과제</div>
+            <Link className="smallButton" href="/tasks?scope=open">
               전체 보기
             </Link>
           </div>
@@ -88,29 +88,29 @@ export default async function HomePage() {
                 </tr>
               </thead>
               <tbody>
-                {work.tickets.length === 0 ? (
+                {work.tasks.length === 0 ? (
                   <tr>
                     <td colSpan={3} className="emptyCell">
-                      담당 티켓이 없습니다.
+                      담당 과제이 없습니다.
                     </td>
                   </tr>
                 ) : (
-                  [...overdue, ...dueToday, ...work.tickets.filter((t) => !overdue.includes(t) && !dueToday.includes(t) && !noDate.includes(t)), ...noDate]
+                  [...overdue, ...dueToday, ...work.tasks.filter((t) => !overdue.includes(t) && !dueToday.includes(t) && !noDate.includes(t)), ...noDate]
                     .slice(0, 15)
-                    .map((ticket) => (
-                      <tr key={ticket.id}>
-                        <td>{ticket.title}</td>
+                    .map((task) => (
+                      <tr key={task.id}>
+                        <td>{task.title}</td>
                         <td>
-                          {ticket.project ? (
-                            <Link className="tableLink" href={`/projects/${ticket.project.id}`}>
-                              {truncate(ticket.project.name, 16)}
+                          {task.project ? (
+                            <Link className="tableLink" href={`/projects/${task.project.id}`}>
+                              {truncate(task.project.name, 16)}
                             </Link>
                           ) : (
                             <span className="faintText">미분류</span>
                           )}
                         </td>
-                        <td className={ticket.due_date && ticket.due_date < today ? "overdue" : "mutedText"}>
-                          {formatDate(ticket.due_date)}
+                        <td className={task.due_date && task.due_date < today ? "overdue" : "mutedText"}>
+                          {formatDate(task.due_date)}
                         </td>
                       </tr>
                     ))

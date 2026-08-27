@@ -1303,3 +1303,10 @@ th.numeric {
 .weeklyInput textarea {
   width: 100%;
 }
+
+/* 페이지 머리 오른쪽에 붙는 신규 등록 버튼 */
+.pageHeaderMeta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

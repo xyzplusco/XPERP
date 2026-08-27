@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { BulkTable, type BulkRow, type ColumnDef } from "@/components/BulkTable";
 import { SaveNotice } from "@/components/SaveNotice";
-import { getDeals, getFolderCounts, getFolders, getLastUpdateMap, getPersonOptions } from "@/lib/queries";
-import { getSessionUser, isAdmin } from "@/lib/auth";
+import { getCompanyNames, getDeals, getFolderCounts, getFolders, getLastUpdateMap, getPersonOptions } from "@/lib/queries";
+import { canWrite, getSessionUser } from "@/lib/auth";
+import { NewRecordDialog } from "@/components/NewRecordDialog";
+import { createProjectAction } from "@/lib/actions";
 import {
-  ARCHIVED_DEAL_STATUS,
   DEAL_STATUS_OPTIONS,
   PIPELINE_STAGE_OPTIONS,
   SERVICE_SECTOR_OPTIONS,
@@ -16,42 +17,29 @@ export const dynamic = "force-dynamic";
 export default async function ProjectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; folder?: string; view?: string; saved?: string; trashed?: string; error?: string }>;
+  searchParams: Promise<{ folder?: string; view?: string; saved?: string; trashed?: string; error?: string }>;
 }) {
-  const { status, folder = "all", view = "active", saved, trashed, error } = await searchParams;
+  const { folder = "all", view = "all", saved, trashed, error } = await searchParams;
 
-  const [folders, folderCounts, peopleOptions, user] = await Promise.all([
+  const [folders, folderCounts, peopleOptions, user, companyNames] = await Promise.all([
     getFolders(),
     getFolderCounts(),
     getPersonOptions(),
     getSessionUser(),
+    getCompanyNames(),
   ]);
   const activeFolder = folders.find((item) => item.id === folder);
   const allDeals = await getDeals({
-    status,
     folderId: activeFolder?.id,
     unsorted: folder === "unsorted",
   });
   const lastMap = await getLastUpdateMap(allDeals.map((d) => d.id));
 
-  // 아카이브 = 더 진행하지 않는 건 (상태가 관리·보류)
-  const isArchived = (deal: (typeof allDeals)[number]) => ARCHIVED_DEAL_STATUS.has(deal.deal_status);
-
-  const deals =
-    view === "archive" ? allDeals.filter(isArchived)
-    : view === "stale" ? allDeals.filter((d) => {
-        const days = daysSince(lastMap.get(d.id)?.date ?? null);
-        return !isArchived(d) && (days === null || days > 30);
-      })
-    : view === "all" ? allDeals
-    : allDeals.filter((d) => !isArchived(d));
-
-  const activeCount = allDeals.filter((d) => !isArchived(d)).length;
-  const archiveCount = allDeals.length - activeCount;
-  const staleCount = allDeals.filter((d) => {
-    const days = daysSince(lastMap.get(d.id)?.date ?? null);
-    return !isArchived(d) && (days === null || days > 30);
-  }).length;
+  const statusCounts = new Map<string, number>();
+  for (const deal of allDeals) {
+    statusCounts.set(deal.deal_status, (statusCounts.get(deal.deal_status) ?? 0) + 1);
+  }
+  const deals = view === "all" ? allDeals : allDeals.filter((d) => d.deal_status === view);
 
   const folderOptions: [string, string][] = folders.map((item) => [item.id, item.name]);
   const stageOptions: [string, string][] = PIPELINE_STAGE_OPTIONS.map((v) => [v, v]);
@@ -105,34 +93,44 @@ export default async function ProjectsPage({
     },
   }));
 
-  const tabHref = (key: string) =>
-    `/projects?folder=${key}&view=${view}${status ? `&status=${status}` : ""}`;
-  const viewHref = (key: string) =>
-    `/projects?folder=${folder}&view=${key}${status ? `&status=${status}` : ""}`;
-  const returnPath = `/projects?folder=${folder}&view=${view}${status ? `&status=${status}` : ""}`;
+  const tabHref = (key: string) => `/projects?folder=${key}&view=${encodeURIComponent(view)}`;
+  const viewHref = (key: string) => `/projects?folder=${folder}&view=${encodeURIComponent(key)}`;
+  const returnPath = `/projects?folder=${folder}&view=${encodeURIComponent(view)}`;
 
   return (
     <>
       <div className="pageHeader">
         <h1>프로젝트</h1>
-        <div className="pageHeaderMeta">{deals.length}건</div>
+        <div className="pageHeaderMeta">
+          {deals.length}건
+          {canWrite(user) ? (
+            <NewRecordDialog
+              label="새 프로젝트"
+              action={createProjectAction}
+              fields={[
+                { name: "name", label: "프로젝트명", required: true },
+                { name: "company_name", label: "고객사", listId: "new-project-companies", listValues: companyNames },
+                { name: "pipeline_stage", label: "구간", type: "select", options: [...PIPELINE_STAGE_OPTIONS] },
+                { name: "deal_status", label: "상태", type: "select", options: [...DEAL_STATUS_OPTIONS] },
+                { name: "service_sector", label: "서비스섹터", type: "select", options: [...SERVICE_SECTOR_OPTIONS] },
+              ]}
+            />
+          ) : null}
+        </div>
       </div>
 
       <SaveNotice saved={saved ?? trashed} error={error} />
 
-      <div className="filterBar">
-        <Link href={viewHref("active")} className={view === "active" ? "smallButton navItemActive" : "smallButton"}>
-          활성 {activeCount}
+      <div className="tabRow">
+        <Link href={viewHref("all")} className={view === "all" ? "tab tabOn" : "tab"}>
+          전체<span className="tabCount">{allDeals.length}</span>
         </Link>
-        <Link href={viewHref("stale")} className={view === "stale" ? "smallButton navItemActive" : "smallButton"}>
-          정체 30일+ {staleCount}
-        </Link>
-        <Link href={viewHref("archive")} className={view === "archive" ? "smallButton navItemActive" : "smallButton"}>
-          아카이브 {archiveCount}
-        </Link>
-        <Link href={viewHref("all")} className={view === "all" ? "smallButton navItemActive" : "smallButton"}>
-          전체 {allDeals.length}
-        </Link>
+        {DEAL_STATUS_OPTIONS.map((option) => (
+          <Link key={option} href={viewHref(option)} className={view === option ? "tab tabOn" : "tab"}>
+            {option}
+            <span className="tabCount">{statusCounts.get(option) ?? 0}</span>
+          </Link>
+        ))}
       </div>
 
       <div className="tabRow">
@@ -149,18 +147,6 @@ export default async function ProjectsPage({
         </Link>
       </div>
 
-      <form className="filterBar" method="get">
-        <input type="hidden" name="folder" value={folder} />
-        <input type="hidden" name="view" value={view} />
-        <select name="status" defaultValue={status ?? ""}>
-          <option value="">전체 상태</option>
-          {DEAL_STATUS_OPTIONS.map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
-        <button className="smallButton" type="submit">적용</button>
-      </form>
-
       <div className="panel">
         <BulkTable
           entity="projects"
@@ -168,7 +154,6 @@ export default async function ProjectsPage({
           rows={rows}
           returnPath={returnPath}
           storageKey="projects"
-          canPaste={isAdmin(user)}
           bulkActions={[
             { field: "deal_status", label: "상태 변경", options: statusOptions },
             { field: "pipeline_stage", label: "구간 변경", options: stageOptions },

@@ -30,7 +30,7 @@ npm run dev                  # http://localhost:3000
 |---|---|
 | 아키텍처 | Next.js 16.3 (App Router, RSC + Server Actions) + Supabase (Auth/DB/Storage) |
 | 배포 | Vercel, 함수 리전 도쿄(`hnd1`) 고정. GitHub `xyzplusco/XPERP` push 시 자동 배포 |
-| DB 스키마 | 마이그레이션 16건 전부 라이브 적용 완료 (2026-08-23 확인) |
+| DB 스키마 | 마이그레이션 19건 전부 라이브 적용 완료 (2026-08-26 확인) |
 | 인증 | Supabase Auth 이메일/비밀번호. `proxy.ts` 세션 가드 |
 | 권한 | owner / staff / member / viewer 4단계, RLS로 DB 레벨 강제 (§2) |
 | 문서 저장 | Storage `xp-documents`, `xp-meeting-notes` (private, signed URL) |
@@ -174,7 +174,7 @@ components/InviteeLookup.tsx # 이벤트 참석자 파트너 검색 추가 + 인
 components/InviteeManager.tsx / MeetingNotesPanel / DocumentsPanel / DealTable / SaveNotice
 
 scripts/                     # 엑셀 왕복·마이그레이션·계약 임포트·계정 생성 (§5)
-supabase/migrations/         # 16건, 전부 라이브 적용됨
+supabase/migrations/         # 19건, 전부 라이브 적용됨
 docs/permissions-plan.md     # 권한 재설계 기획
 docs/ux-roadmap.md           # UX 로드맵 1~3단계
 docs/schema-inventory.md     # 테이블별 운영/파생/이력/폐기 분류 — 스키마 건드리기 전에 읽을 것
@@ -210,6 +210,11 @@ docs/schema-inventory.md     # 테이블별 운영/파생/이력/폐기 분류 �
 
 영문 `status` 와 `contract_status` 는 **트리거가 파생**시킨다. 직접 쓰지 말 것.
 아카이브 판정은 `deal_status in ('관리','보류')`.
+프로젝트 목록의 탭이 곧 상태다. 고객사는 프로젝트가 여러 개면
+**계약 → 계약임박 → 제안 → 가망 → 관리 → 보류 → 미분류** 순으로 앞선 것을 대표 상태로 쓴다(`topDealStatus`).
+
+**용어: '티켓' 이 아니라 '과제' 다.** 라우트도 `/tasks`. 새로 쓰는 문구에 '티켓' 을 쓰지 말 것.
+**엑셀 붙여넣기 기능은 제거됐다.** 대량 수정은 인라인 편집 + 일괄 변경, 또는 엑셀 왕복 스크립트를 쓴다.
 
 고객사는 감추지 않는다. 화면에서 **고객사(프로젝트 있음) / 소속처(파트너만) / 미연결** 로 분류만 한다.
 `erp_customer_rows` 뷰는 폐기했다 — **숨기는 필터 뷰를 다시 만들지 말 것.** 안 보이면 고칠 수도 없다.

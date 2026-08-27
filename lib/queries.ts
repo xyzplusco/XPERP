@@ -1,5 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { shortId } from "@/lib/ids";
+import { ARCHIVED_DEAL_STATUS, topDealStatus } from "@/lib/labels";
 
 type Ref = { id: string; name_ko: string } | null;
 
@@ -137,18 +138,20 @@ export async function getCustomers(): Promise<CustomerRow[]> {
 
   warnIfCapped("고객사", companyRes.data, 2000);
 
-  const byCompany = new Map<string, { total: number; active: number; latest: string; next: string; at: string }>();
+  // 한 고객사에 프로젝트가 여러 개면 계약 → 계약임박 → 제안 → 가망 → 관리 → 보류 → 미분류
+  // 순으로 앞선 상태를 그 고객사의 대표 상태로 쓴다.
+  const byCompany = new Map<string, { total: number; active: number; statuses: string[]; next: string; at: string }>();
   for (const row of (projectRes.data ?? []) as {
     company_id: string | null; deal_status: string; next_action: string | null;
     latest_update: string | null; updated_at: string;
   }[]) {
     if (!row.company_id) continue;
-    const cur = byCompany.get(row.company_id) ?? { total: 0, active: 0, latest: "", next: "", at: "" };
+    const cur = byCompany.get(row.company_id) ?? { total: 0, active: 0, statuses: [], next: "", at: "" };
     cur.total += 1;
-    if (!["관리", "보류"].includes(row.deal_status)) cur.active += 1;
+    if (!ARCHIVED_DEAL_STATUS.has(row.deal_status)) cur.active += 1;
+    cur.statuses.push(row.deal_status);
     if (row.updated_at > cur.at) {
       cur.at = row.updated_at;
-      cur.latest = row.deal_status;
       cur.next = row.next_action ?? row.latest_update ?? "";
     }
     byCompany.set(row.company_id, cur);
@@ -174,7 +177,7 @@ export async function getCustomers(): Promise<CustomerRow[]> {
       project_count: stat?.total ?? 0,
       active_project_count: stat?.active ?? 0,
       partner_count: partners,
-      latest_status: stat?.latest ?? "",
+      latest_status: stat ? topDealStatus(stat.statuses) : "",
       next_action: stat?.next || (row.next_action ?? ""),
       kind,
     };
@@ -712,7 +715,7 @@ export async function getProjectMeetingNotes(projectId: string) {
   return decorateMeetingNotes((data ?? []) as unknown as Record<string, unknown>[]);
 }
 
-// ---------------------------------------------------------------- 폴더 / 티켓
+// ---------------------------------------------------------------- 폴더 / 과제
 
 export type Folder = { id: string; name: string; sort_order: number };
 
@@ -729,7 +732,7 @@ export async function getFolders(): Promise<Folder[]> {
   return (data ?? []) as Folder[];
 }
 
-export type Ticket = {
+export type Task = {
   id: string;
   title: string;
   description: string | null;
@@ -748,16 +751,16 @@ const TICKET_SELECT =
   "assignee:people!tasks_assignee_person_id_fkey(id, name_ko), " +
   "company:companies!tasks_company_id_fkey(id, name_ko)";
 
-function normalizeTicket(row: Record<string, unknown>): Ticket {
+function normalizeTask(row: Record<string, unknown>): Task {
   return {
-    ...(row as unknown as Ticket),
+    ...(row as unknown as Task),
     project: one(row.project as { id: string; name: string } | { id: string; name: string }[]),
     assignee: one(row.assignee as { id: string; name_ko: string } | { id: string; name_ko: string }[]),
     company: one(row.company as { id: string; name_ko: string } | { id: string; name_ko: string }[]),
   };
 }
 
-export async function getTickets(filters?: {
+export async function getTasks(filters?: {
   scope?: string;
   status?: string;
   assigneePersonId?: string;
@@ -776,15 +779,15 @@ export async function getTickets(filters?: {
 
   const { data, error } = await query.limit(500);
   if (error) {
-    console.error("getTickets", error.message);
+    console.error("getTasks", error.message);
     return [];
   }
   return (data as unknown as Record<string, unknown>[])
-    .map(normalizeTicket)
+    .map(normalizeTask)
     .filter((t) => t.title && !/^\d+$/.test(t.title));
 }
 
-export async function getTicketCounts() {
+export async function getTaskCounts() {
   const supabase = await createSupabaseServer();
   const open = ["backlog", "in_progress", "waiting", "blocked"];
   const [unsorted, openCount, total] = await Promise.all([
@@ -887,7 +890,7 @@ const TRASH_SOURCES: { entity: string; label: string; nameField: string; extra: 
   { entity: "events", label: "이벤트", nameField: "name", extra: "event_type" },
   { entity: "companies", label: "고객사", nameField: "name_ko", extra: "industry" },
   { entity: "people", label: "파트너", nameField: "name_ko", extra: "title" },
-  { entity: "tasks", label: "티켓", nameField: "title", extra: "status" },
+  { entity: "tasks", label: "과제", nameField: "title", extra: "status" },
 ];
 
 export async function getTrash() {
@@ -972,7 +975,7 @@ export async function getMyWork(personId: string | null) {
   const supabase = await createSupabaseServer();
   const ids = await myProjectIds(personId);
 
-  const [ticketsRes, projectsRes] = await Promise.all([
+  const [tasksRes, projectsRes] = await Promise.all([
     personId
       ? supabase
           .from("tasks")
@@ -1011,9 +1014,9 @@ export async function getMyWork(personId: string | null) {
     })
     .sort((a, b) => String(a.lastUpdateDate ?? "").localeCompare(String(b.lastUpdateDate ?? "")));
 
-  const tickets = ((ticketsRes.data ?? []) as unknown as Record<string, unknown>[]).map(normalizeTicket);
+  const tasks = ((tasksRes.data ?? []) as unknown as Record<string, unknown>[]).map(normalizeTask);
 
-  return { tickets, projects };
+  return { tasks, projects };
 }
 
 export type WeeklyRow = {
@@ -1333,8 +1336,8 @@ export async function getWeeklyReview(label: string): Promise<WeeklyReviewRow[]>
     });
 }
 
-// 티켓 상세
-export async function getTicket(id: string) {
+// 과제 상세
+export async function getTask(id: string) {
   const supabase = await createSupabaseServer();
   const { data: task } = await supabase
     .from("tasks")
@@ -1406,4 +1409,230 @@ export async function getCompanyNames(): Promise<string[]> {
     .order("name_ko")
     .limit(2000);
   return Array.from(new Set(((data ?? []) as { name_ko: string }[]).map((c) => c.name_ko))).filter(Boolean);
+}
+
+// ── 회의록 ──────────────────────────────────────────────────────────────────
+export type MeetingRow = {
+  id: string;
+  title: string;
+  meeting_date: string | null;
+  attendees: string | null;
+  summary: string | null;
+  ai_summary: string | null;
+  ai_status: string;
+  file_name: string | null;
+  audio_path: string | null;
+  company: string | null;
+  companyId: string | null;
+  project: string | null;
+  projectId: string | null;
+  actionCount: number;
+  openActionCount: number;
+  url: string | null;
+  audioUrl: string | null;
+};
+
+export async function getMeetings(query?: string): Promise<MeetingRow[]> {
+  const supabase = await createSupabaseServer();
+
+  let request = supabase
+    .from("meeting_notes")
+    .select(
+      "id, title, meeting_date, attendees, summary, ai_summary, ai_status, file_name, " +
+        "storage_bucket, storage_path, audio_bucket, audio_path, " +
+        "company:companies!meeting_notes_company_id_fkey(id, name_ko), " +
+        "project:projects!meeting_notes_project_id_fkey(id, name)"
+    )
+    .order("meeting_date", { ascending: false, nullsFirst: false })
+    .limit(500);
+
+  if (query) {
+    const q = `%${query}%`;
+    request = request.or(`title.ilike.${q},attendees.ilike.${q},summary.ilike.${q},ai_summary.ilike.${q},transcript.ilike.${q}`);
+  }
+
+  const { data, error } = await request;
+  if (error) {
+    console.error("getMeetings", error.message);
+    return [];
+  }
+
+  const rows = (data ?? []) as unknown as Record<string, unknown>[];
+  const ids = rows.map((r) => r.id as string);
+
+  const { data: actions } = ids.length
+    ? await supabase.from("meeting_action_items").select("meeting_note_id, task_id, dismissed_at").in("meeting_note_id", ids)
+    : { data: [] };
+
+  const total = new Map<string, number>();
+  const open = new Map<string, number>();
+  for (const a of (actions ?? []) as { meeting_note_id: string; task_id: string | null; dismissed_at: string | null }[]) {
+    total.set(a.meeting_note_id, (total.get(a.meeting_note_id) ?? 0) + 1);
+    if (!a.task_id && !a.dismissed_at) open.set(a.meeting_note_id, (open.get(a.meeting_note_id) ?? 0) + 1);
+  }
+
+  const signed = await signMany([
+    ...rows.filter((r) => r.storage_path).map((r) => ({ bucket: (r.storage_bucket as string) ?? "xp-meeting-notes", path: r.storage_path as string })),
+    ...rows.filter((r) => r.audio_path).map((r) => ({ bucket: (r.audio_bucket as string) ?? "xp-meeting-audio", path: r.audio_path as string })),
+  ]);
+
+  return rows.map((row) => {
+    const company = one(row.company as { id: string; name_ko: string } | { id: string; name_ko: string }[]);
+    const project = one(row.project as { id: string; name: string } | { id: string; name: string }[]);
+    return {
+      id: row.id as string,
+      title: (row.title as string) ?? "",
+      meeting_date: (row.meeting_date as string) ?? null,
+      attendees: (row.attendees as string) ?? null,
+      summary: (row.summary as string) ?? null,
+      ai_summary: (row.ai_summary as string) ?? null,
+      ai_status: (row.ai_status as string) ?? "none",
+      file_name: (row.file_name as string) ?? null,
+      audio_path: (row.audio_path as string) ?? null,
+      company: company?.name_ko ?? null,
+      companyId: company?.id ?? null,
+      project: project?.name ?? null,
+      projectId: project?.id ?? null,
+      actionCount: total.get(row.id as string) ?? 0,
+      openActionCount: open.get(row.id as string) ?? 0,
+      url: row.storage_path
+        ? signed.get(`${(row.storage_bucket as string) ?? "xp-meeting-notes"}::${row.storage_path}`) ?? null
+        : null,
+      audioUrl: row.audio_path
+        ? signed.get(`${(row.audio_bucket as string) ?? "xp-meeting-audio"}::${row.audio_path}`) ?? null
+        : null,
+    };
+  });
+}
+
+// 문서 검색 — 제목·파일명·유형으로 찾는다. 연결된 대상도 같이 보여준다.
+export type DocumentSearchRow = {
+  id: string;
+  title: string;
+  document_type: string;
+  file_name: string | null;
+  uploaded_at: string | null;
+  sensitivity: string;
+  url: string | null;
+  linkedTo: string;
+  linkHref: string | null;
+};
+
+export async function searchDocuments(query?: string): Promise<DocumentSearchRow[]> {
+  const supabase = await createSupabaseServer();
+
+  let request = supabase
+    .from("documents")
+    .select("id, title, document_type, file_name, storage_bucket, storage_path, external_url, uploaded_at, sensitivity")
+    .order("uploaded_at", { ascending: false, nullsFirst: false })
+    .limit(500);
+
+  if (query) {
+    const q = `%${query}%`;
+    request = request.or(`title.ilike.${q},file_name.ilike.${q},document_type.ilike.${q},memo.ilike.${q}`);
+  }
+
+  const { data, error } = await request;
+  if (error) {
+    console.error("searchDocuments", error.message);
+    return [];
+  }
+  const docs = (data ?? []) as Record<string, string | null>[];
+  warnIfCapped("문서", docs, 500);
+
+  const ids = docs.map((d) => d.id as string);
+  const { data: links } = ids.length
+    ? await supabase.from("entity_documents").select("document_id, entity_type, entity_id").in("document_id", ids)
+    : { data: [] };
+
+  const linkRows = (links ?? []) as { document_id: string; entity_type: string; entity_id: string }[];
+  const companyIds = linkRows.filter((l) => l.entity_type === "company").map((l) => l.entity_id);
+  const projectIds = linkRows.filter((l) => l.entity_type === "project").map((l) => l.entity_id);
+  const personIds = linkRows.filter((l) => l.entity_type === "person").map((l) => l.entity_id);
+
+  const [cs, ps, pe] = await Promise.all([
+    companyIds.length ? supabase.from("companies").select("id, name_ko").in("id", companyIds) : Promise.resolve({ data: [] }),
+    projectIds.length ? supabase.from("projects").select("id, name").in("id", projectIds) : Promise.resolve({ data: [] }),
+    personIds.length ? supabase.from("people").select("id, name_ko").in("id", personIds) : Promise.resolve({ data: [] }),
+  ]);
+  const nameOf = new Map<string, string>();
+  for (const c of (cs.data ?? []) as { id: string; name_ko: string }[]) nameOf.set(`company:${c.id}`, c.name_ko);
+  for (const p of (ps.data ?? []) as { id: string; name: string }[]) nameOf.set(`project:${p.id}`, p.name);
+  for (const p of (pe.data ?? []) as { id: string; name_ko: string }[]) nameOf.set(`person:${p.id}`, p.name_ko);
+
+  const linkByDoc = new Map<string, { type: string; id: string }>();
+  for (const l of linkRows) if (!linkByDoc.has(l.document_id)) linkByDoc.set(l.document_id, { type: l.entity_type, id: l.entity_id });
+
+  const signed = await signMany(
+    docs.filter((d) => !d.external_url && d.storage_path)
+      .map((d) => ({ bucket: d.storage_bucket ?? "xp-documents", path: d.storage_path as string }))
+  );
+
+  const PATH: Record<string, string> = { company: "/customers", project: "/projects", person: "/partners" };
+
+  return docs.map((doc) => {
+    const link = linkByDoc.get(doc.id as string);
+    const name = link ? nameOf.get(`${link.type}:${link.id}`) ?? "" : "";
+    return {
+      id: doc.id as string,
+      title: doc.title ?? "",
+      document_type: doc.document_type ?? "",
+      file_name: doc.file_name,
+      uploaded_at: doc.uploaded_at,
+      sensitivity: doc.sensitivity ?? "internal",
+      url: doc.external_url ?? signed.get(`${doc.storage_bucket ?? "xp-documents"}::${doc.storage_path}`) ?? null,
+      linkedTo: name,
+      linkHref: link && PATH[link.type] ? `${PATH[link.type]}/${link.id}` : null,
+    };
+  });
+}
+
+export async function getMeeting(id: string) {
+  const supabase = await createSupabaseServer();
+  const { data: note } = await supabase
+    .from("meeting_notes")
+    .select(
+      "id, title, meeting_date, attendees, summary, ai_summary, ai_status, ai_error, transcript, " +
+        "file_name, storage_bucket, storage_path, audio_bucket, audio_path, created_at, " +
+        "company:companies!meeting_notes_company_id_fkey(id, name_ko), " +
+        "project:projects!meeting_notes_project_id_fkey(id, name)"
+    )
+    .eq("id", id)
+    .maybeSingle();
+  if (!note) return null;
+
+  const row = note as unknown as Record<string, unknown>;
+  const { data: items } = await supabase
+    .from("meeting_action_items")
+    .select("id, body, due_date, origin, task_id, dismissed_at, assignee:people!meeting_action_items_assignee_person_id_fkey(id, name_ko)")
+    .eq("meeting_note_id", id)
+    .order("created_at");
+
+  const signed = await signMany([
+    ...(row.storage_path ? [{ bucket: (row.storage_bucket as string) ?? "xp-meeting-notes", path: row.storage_path as string }] : []),
+    ...(row.audio_path ? [{ bucket: (row.audio_bucket as string) ?? "xp-meeting-audio", path: row.audio_path as string }] : []),
+  ]);
+
+  return {
+    note: Object.assign({}, row, {
+      company: one(row.company as { id: string; name_ko: string } | { id: string; name_ko: string }[]),
+      project: one(row.project as { id: string; name: string } | { id: string; name: string }[]),
+      url: row.storage_path ? signed.get(`${(row.storage_bucket as string) ?? "xp-meeting-notes"}::${row.storage_path}`) ?? null : null,
+      audioUrl: row.audio_path ? signed.get(`${(row.audio_bucket as string) ?? "xp-meeting-audio"}::${row.audio_path}`) ?? null : null,
+    }) as Record<string, unknown> & {
+      company: { id: string; name_ko: string } | null;
+      project: { id: string; name: string } | null;
+      url: string | null;
+      audioUrl: string | null;
+    },
+    items: ((items ?? []) as unknown as Record<string, unknown>[]).map((item) => ({
+      id: item.id as string,
+      body: item.body as string,
+      due_date: (item.due_date as string) ?? null,
+      origin: item.origin as string,
+      task_id: (item.task_id as string) ?? null,
+      dismissed_at: (item.dismissed_at as string) ?? null,
+      assignee: one(item.assignee as { id: string; name_ko: string } | { id: string; name_ko: string }[]),
+    })),
+  };
 }

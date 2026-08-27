@@ -22,7 +22,9 @@
     "db:status": "node scripts/migration_status.mjs",
     "db:migrate:api": "node scripts/apply_migrations_api.mjs",
     "db:status:api": "node scripts/migration_status_api.mjs",
-    "pipeline:sync": "node scripts/sync_pipeline.mjs"
+    "pipeline:sync": "node scripts/sync_pipeline.mjs",
+    "partners:export": "node scripts/export_partners.mjs",
+    "partners:apply": "node scripts/apply_partner_sheet.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

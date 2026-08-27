@@ -1,6 +1,6 @@
 // 알림은 두 종류다.
 //
-//  사건 알림 — 티켓 배정, 보완 요청처럼 '그 순간'에만 알 수 있는 것. notifications 테이블에 쌓고 읽음 처리한다.
+//  사건 알림 — 과제 배정, 보완 요청처럼 '그 순간'에만 알 수 있는 것. notifications 테이블에 쌓고 읽음 처리한다.
 //  상태 알림 — 미작성 N건, 정체 N건처럼 '지금 세면 되는' 것. 저장하지 않고 볼 때마다 계산한다.
 //              크론이 필요 없고 항상 정확하며, 해결되면 저절로 사라진다.
 
@@ -177,9 +177,9 @@ export async function getStateAlerts(user: SessionUser | null): Promise<StateAle
     if ((overdue.count ?? 0) > 0) {
       alerts.push({
         key: "ticket_overdue",
-        title: "기한 지난 내 티켓",
+        title: "기한 지난 내 과제",
         count: overdue.count ?? 0,
-        link: "/tickets?scope=open",
+        link: "/tasks?scope=open",
         urgent: true,
       });
     }
@@ -243,9 +243,9 @@ export async function getStateAlerts(user: SessionUser | null): Promise<StateAle
     if ((unsortedTickets.count ?? 0) >= 20) {
       alerts.push({
         key: "unsorted_tickets",
-        title: "미분류 티켓",
+        title: "미분류 과제",
         count: unsortedTickets.count ?? 0,
-        link: "/tickets?scope=unsorted",
+        link: "/tasks?scope=unsorted",
         urgent: false,
       });
     }

@@ -140,7 +140,7 @@ export const ENTITY_LABEL: Record<EntityKey, string> = {
   events: "이벤트",
   companies: "고객사",
   people: "파트너",
-  tasks: "티켓",
+  tasks: "과제",
 };
 
 export const ENTITY_NAME_FIELD: Record<EntityKey, string> = {

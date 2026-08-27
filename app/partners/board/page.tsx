@@ -201,7 +201,6 @@ export default async function PartnerBoardPage({
       <div className="panel">
         <BulkTable
           storageKey="partner-board"
-          canPaste={isAdmin(user)}
           entity="people"
           columns={columns}
           rows={rows}

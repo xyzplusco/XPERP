@@ -66,7 +66,6 @@ export default async function EventsPage({
       <div className="panel">
         <BulkTable
           storageKey="events"
-          canPaste={isAdmin(user)}
           entity="events"
           columns={columns}
           rows={rows}

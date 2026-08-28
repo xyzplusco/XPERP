@@ -92,6 +92,8 @@ export const PROFILE_EDITABLE: Record<string, FieldSpec> = {
   nda_status: { options: ["O", "X", "Unknown"] },
   profile_status: { options: ["O", "X", "Unknown"] },
   appointment_status: { options: ["O", "X", "Unknown"] },
+  recommender: { text: true },
+  expertise_detail: { text: true },
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -60,6 +60,8 @@ export default async function PartnersPage({
     { key: "title", header: "직함", width: 110, kind: "text" },
     { key: "email", header: "이메일", width: 200, kind: "text" },
     { key: "phone", header: "연락처", width: 120, kind: "text" },
+    { key: "recommender", header: "추천인", width: 110, kind: "text" },
+    { key: "expertise_detail", header: "전문 분야", width: 220, kind: "text" },
     { key: "nda_status", header: "NDA", width: 80, kind: "select", options: DOC_STATE_OPTIONS },
     { key: "profile_status", header: "프로필", width: 80, kind: "select", options: DOC_STATE_OPTIONS },
     { key: "appointment_status", header: "위촉", width: 80, kind: "select", options: DOC_STATE_OPTIONS },
@@ -76,6 +78,8 @@ export default async function PartnersPage({
       title: person.title ?? person.profile?.xp_role ?? "",
       email: person.email ?? "",
       phone: person.phone ?? "",
+      recommender: person.profile?.recommender ?? "",
+      expertise_detail: person.profile?.expertise_detail ?? "",
       nda_status: docState(person.profile?.nda_status),
       profile_status: docState(person.profile?.profile_status),
       appointment_status: docState(person.profile?.appointment_status),
@@ -90,6 +94,8 @@ export default async function PartnersPage({
       title: person.title ?? "",
       email: person.email ?? "",
       phone: person.phone ?? "",
+      recommender: person.profile?.recommender ?? "",
+      expertise_detail: person.profile?.expertise_detail ?? "",
       nda_status: person.profile?.nda_status ?? "Unknown",
       profile_status: person.profile?.profile_status ?? "Unknown",
       appointment_status: person.profile?.appointment_status ?? "Unknown",
@@ -113,6 +119,7 @@ export default async function PartnersPage({
                 { name: "email", label: "이메일", type: "email" },
                 { name: "phone", label: "연락처" },
                 { name: "partner_status", label: "구분", type: "select", options: [...PARTNER_CLASS_OPTIONS] },
+                { name: "recommender", label: "추천인" },
               ]}
             />
           ) : null}

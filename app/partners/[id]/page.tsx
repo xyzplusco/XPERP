@@ -99,12 +99,12 @@ export default async function PartnerDetailPage({
               <div className="kvValue">{label(profile?.network_segment) || "미분류"}</div>
             </div>
             <div className="kvItem">
-              <div className="kvLabel">핵심 분야</div>
-              <div className="kvValue">{profile?.core_field ?? "–"}</div>
+              <div className="kvLabel">추천인</div>
+              <div className="kvValue">{profile?.recommender || "–"}</div>
             </div>
             <div className="kvItem">
-              <div className="kvLabel">전문성</div>
-              <div className="kvValue">{profile?.expertise_detail ?? "–"}</div>
+              <div className="kvLabel">전문 분야</div>
+              <div className="kvValue">{profile?.expertise_detail || "–"}</div>
             </div>
             <div className="kvItem">
               <div className="kvLabel">NDA</div>
@@ -120,7 +120,7 @@ export default async function PartnerDetailPage({
             </div>
             <div className="kvItem">
               <div className="kvLabel">메모</div>
-              <div className="kvValue">{String(person.memo ?? "") || profile?.memo || "–"}</div>
+              <div className="kvValue">{String(person.memo ?? "") || "–"}</div>
             </div>
           </div>
         </div>
@@ -292,8 +292,12 @@ export default async function PartnerDetailPage({
                 </select>
               </div>
               <div className="field">
-                <label>핵심 분야</label>
-                <input name="core_field" defaultValue={profile?.core_field ?? ""} />
+                <label>추천인</label>
+                <input name="recommender" defaultValue={profile?.recommender ?? ""} />
+              </div>
+              <div className="field full">
+                <label>전문 분야</label>
+                <input name="expertise_detail" defaultValue={profile?.expertise_detail ?? ""} />
               </div>
               <div className="field full">
                 <label>메모</label>

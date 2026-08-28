@@ -65,7 +65,6 @@ try {
       network_segment: SEG[get("네트워크 분류")] ?? "unknown",
       company: get("소속"), title: get("직함"), xp_role: get("XP 역할"),
       email: get("이메일"), phone: get("연락처"), region: get("지역"),
-      core_field: PLACEHOLDER.has(get("핵심 분야")) ? "" : get("핵심 분야"),
       expertise_detail: get("전문 상세"),
       nda_status: DOC[get("NDA")] ?? "Unknown",
       profile_status: DOC[get("프로필")] ?? "Unknown",
@@ -80,7 +79,7 @@ try {
       coalesce(p.email,'') email, coalesce(p.phone,'') phone, coalesce(p.region,'') region,
       coalesce(p.memo,'') memo, coalesce(p.source,'') source, coalesce(c.name_ko,'') company,
       coalesce(np.partner_status,'') partner_status, coalesce(np.network_segment,'') network_segment,
-      coalesce(np.xp_role,'') xp_role, coalesce(np.core_field,'') core_field,
+      coalesce(np.xp_role,'') xp_role,
       coalesce(np.expertise_detail,'') expertise_detail, coalesce(np.nda_status,'') nda_status,
       coalesce(np.profile_status,'') profile_status, coalesce(np.appointment_status,'') appointment_status,
       coalesce(np.recommender,'') recommender
@@ -134,7 +133,7 @@ try {
   const usable = (v) => v && v.length >= 2 && !v.includes("@") && !/^[0-9][0-9\-+() ]{7,}$/.test(v);
 
   const PERSON = ["name_en", "title", "email", "phone", "region", "memo", "source"];
-  const PROFILE = ["partner_status", "network_segment", "xp_role", "core_field",
+  const PROFILE = ["partner_status", "network_segment", "xp_role",
     "expertise_detail", "nda_status", "profile_status", "appointment_status", "recommender"];
 
   const diffs = [], newCompanies = new Set(), unknownCompanies = new Set();
@@ -193,18 +192,18 @@ try {
   for (const part of chunk(diffs, 120)) {
     const values = part.map((d) =>
       `(${lit(d.before.id)}::uuid, ${lit(d.after.partner_status)}, ${lit(d.after.network_segment)}, ${lit(d.after.xp_role)}, ` +
-      `${lit(d.after.core_field)}, ${lit(d.after.expertise_detail)}, ${lit(d.after.nda_status)}, ` +
+      `${lit(d.after.expertise_detail)}, ${lit(d.after.nda_status)}, ` +
       `${lit(d.after.profile_status)}, ${lit(d.after.appointment_status)}, ${lit(d.after.recommender)})`
     );
     await run(`
-      insert into network_profiles (person_id, partner_status, network_segment, xp_role, core_field,
+      insert into network_profiles (person_id, partner_status, network_segment, xp_role,
                                     expertise_detail, nda_status, profile_status, appointment_status, recommender)
       select v.id, nullif(v.ps,''), v.seg, nullif(v.role,''), nullif(v.field,''), nullif(v.detail,''),
              v.nda, v.prof, v.appt, nullif(v.rec,'')
       from (values ${values.join(", ")}) as v(id, ps, seg, role, field, detail, nda, prof, appt, rec)
       on conflict (person_id) do update set
         partner_status = excluded.partner_status, network_segment = excluded.network_segment,
-        xp_role = excluded.xp_role, core_field = excluded.core_field,
+        xp_role = excluded.xp_role,
         expertise_detail = excluded.expertise_detail, nda_status = excluded.nda_status,
         profile_status = excluded.profile_status, appointment_status = excluded.appointment_status,
         recommender = excluded.recommender`);

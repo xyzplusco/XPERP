@@ -1505,3 +1505,25 @@ Mark Taylor(TAP Property) · 최진호 · 장용혁(몬지오) · 한정민 · �
 
 파트너 436 · 고객사 365 · 프로젝트 79 · 과제 151 · 회의록 0 · 계정 3.
 백업: `backup_before_partner_sheet_20260826.json`
+
+## 2026-08-28 — 파트너 명부 잔여 정크 정리 · 추천인 노출
+
+빌드 실패 원인: `device_commit_files` 는 삭제를 전달하지 못한다. 지난 배치에서 지운
+`app/tickets/*`, `components/TicketDialog.tsx` 가 로컬에 남아 커밋됐고, 없어진 export 를
+import 해서 Vercel 의 `next build` 가 죽었다. 추가로 배치에 안 실린 4개 파일이 구버전이라
+삭제된 `canPaste` prop 을 넘기고 있었다. 전부 정리하고 커밋(73ef19f).
+→ 앞으로 파일 전달 후에는 반드시 로컬 `git ls-files` 와 컨테이너 파일 목록을 md5 까지 대조한다.
+
+파트너 명부 정크 정리 (`npm run partners:clean`, 백업 `backup_partner_junk_20260828.json`):
+- `network_profiles.memo` 404건 — `cleaned_partners:...` 임포트 추적 문자열. 전량 제거.
+  상세 페이지가 `person.memo || profile.memo` 로 폴백해서 이게 사용자에게 보이고 있었다.
+  폴백 제거, 메모는 `people.memo` 단일 출처.
+- `agreement_status` 'Unknown' 398건 → null.
+- `core_field` 72건 전부 정크였다(구분값 63 · 본인 이름 2 · 전화 1 · 지역 3 · 기타 1).
+  실제 분야 정보는 `expertise_detail` 에 있다. 컬럼을 UI·왕복 엑셀에서 제거.
+  구분값 중 partner_status 가 비어 있던 17건은 승격.
+- 이름 칸에 회사명이 들어간 2건 교정: 현PE→강수훈(현PE), 스탠더스→이상록(스탠더스).
+- `people.memo` 의 '○○님 소개/지인' 2건 → `recommender` 로 이관.
+
+추천인(`network_profiles.recommender`)은 DB 에 있었지만 UI 에 전혀 노출되지 않았다.
+목록 컬럼·상세·편집 폼·신규 등록에 추가하고 `PROFILE_EDITABLE` 화이트리스트에 등록했다.

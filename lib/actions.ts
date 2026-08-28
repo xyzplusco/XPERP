@@ -264,7 +264,8 @@ export async function updatePartnerAction(personId: string, formData: FormData) 
     nda_status: text(formData, "nda_status"),
     profile_status: text(formData, "profile_status"),
     appointment_status: text(formData, "appointment_status"),
-    core_field: text(formData, "core_field"),
+    recommender: text(formData, "recommender"),
+    expertise_detail: text(formData, "expertise_detail"),
   };
   const { error: profileError } = await supabase
     .from("network_profiles")
@@ -1658,6 +1659,7 @@ export async function createPartnerAction(formData: FormData) {
     person_id: data.id,
     network_segment: "unknown",
     partner_status: text(formData, "partner_status"),
+    recommender: text(formData, "recommender"),
   });
   await logActivity({ entityType: "people", entityId: data.id, action: "create" });
   revalidatePath("/partners");

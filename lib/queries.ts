@@ -254,8 +254,8 @@ export type PartnerRow = {
     nda_status: string | null;
     profile_status: string | null;
     appointment_status: string | null;
-    core_field: string | null;
     expertise_detail: string | null;
+    recommender: string | null;
     memo: string | null;
   } | null;
 };
@@ -267,7 +267,7 @@ export async function getPartners() {
     .select(
       "id, name_ko, name_en, title, email, phone, " +
         "company:companies!people_primary_company_id_fkey(id, name_ko), " +
-        "profile:network_profiles(network_segment, partner_status, xp_role, nda_status, profile_status, appointment_status, core_field, expertise_detail, memo)"
+        "profile:network_profiles(network_segment, partner_status, xp_role, nda_status, profile_status, appointment_status, expertise_detail, recommender, memo)"
     )
     .is("deleted_at", null)
     .order("name_ko", { ascending: true })
